@@ -1,0 +1,31 @@
+# Root-level ignores for the workspace
+
+## Node
+**/node_modules/
+**/npm-debug.log*
+
+## Build outputs
+**/dist/
+**/build/
+
+## OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+## Editor
+.vscode/
+.idea/
+*.code-workspace
+
+## OneDrive/VCS noise
+\~$*
+Thumbs.db
+
+## Logs
+**/logs/
+**/*.log
+
+## Environment
+**/.env
+**/.env.*

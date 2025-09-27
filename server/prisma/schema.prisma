@@ -1,0 +1,111 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+// Optional: predefined categories
+enum TransactionCategory {
+  FOOD
+  TRANSPORT
+  RENT
+  ENTERTAINMENT
+  SALARY
+  OTHER
+}
+
+// User model
+model User {
+  id          String           @id @default(uuid())
+  email       String        @unique
+  password    String
+  username    String
+  profilePic  String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  transactions Transaction[]
+  budgets      Budget[]
+  passwordResets PasswordResetToken[]
+  goals        Goal[]
+}
+
+// Password reset token model
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+// Transaction model
+model Transaction {
+  id          String           @id @default(uuid())
+  name        String
+  date        DateTime
+  category    String
+  type        TransactionType
+  amount      Float
+  icon        String?
+  description String?
+
+  user        User          @relation(fields: [userId], references: [id])
+  userId      String
+
+  budget      Budget?       @relation(fields: [budgetId], references: [id])
+  budgetId    String
+
+  goal        Goal?         @relation(fields: [goalId], references: [id])
+  goalId      String?
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+// Budget model
+model Budget {
+  id        String           @id @default(uuid())
+  date      DateTime         
+  category  String           
+  limit     Float
+  spent     Float         @default(0)
+  icon      String?
+  user      User          @relation(fields: [userId], references: [id])
+  userId    String
+
+  transactions Transaction[]  // transactions linked to this budget
+
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+}
+
+// Goal model
+model Goal {
+  id        String       @id @default(uuid())
+  target    Float
+  progress  Float     @default(0)
+  icon      String?
+  user      User      @relation(fields: [userId], references: [id])
+  userId    String
+
+  transactions Transaction[]  // transactions linked to this goal
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
