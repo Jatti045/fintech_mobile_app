@@ -154,9 +154,10 @@ curl -X POST https://your-api.onrender.com/api/users/login \
 
 ### "Build failed - TypeScript cannot find types"
 - **Error**: `Could not find a declaration file for module 'express'`
-- **Fix**: Update build command to `npm ci && npm run build && npx prisma migrate deploy`
-- **Why**: `npm ci` installs devDependencies (TypeScript types), `npm install` doesn't
-- Go to Render Dashboard → Settings → Build Command → Update → Save Changes
+- **Fix**: TypeScript and `@types/*` packages are in `dependencies` (not `devDependencies`)
+- **Why**: When `NODE_ENV=production`, npm skips devDependencies, but we need types for build
+- **Solution**: The package.json is already configured correctly - just redeploy
+- If issue persists, clear build cache in Render Dashboard and redeploy
 
 ### "Cannot connect to database"
 - Verify DATABASE_URL uses **Internal** URL (not External)

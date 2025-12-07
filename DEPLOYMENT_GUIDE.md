@@ -172,10 +172,11 @@ ALLOWED_ORIGINS=https://yourdomain.com,exp://your-expo-url
 #### Build fails with TypeScript errors about missing types
 **Error**: `Could not find a declaration file for module 'express'` or similar
 **Solution**: 
-- Ensure your build command uses `npm ci` (not `npm install`)
-- Build command should be: `npm ci && npm run build && npx prisma migrate deploy`
-- `npm ci` installs all dependencies including devDependencies which contain TypeScript types
-- If already deployed, go to Render Dashboard → Settings → Build Command and update it
+- This project moves TypeScript and type definitions to `dependencies` (not `devDependencies`)
+- This ensures they're installed in production builds where `NODE_ENV=production`
+- Build command: `npm ci && npm run build && npx prisma migrate deploy`
+- The TypeScript compiler and `@types/*` packages are needed at build time, so they're production dependencies
+- If you see this error, the dependencies may need reinstalling - trigger a manual deploy
 
 #### Server not starting
 - Check logs for errors
