@@ -11,6 +11,7 @@ import {
   Keyboard,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import ModalCloseButton from "../modalCloseButton";
 import { useTheme, useAppDispatch, useAppSelector } from "@/hooks/useRedux";
 import { useThemedAlert } from "@/utils/themedAlert";
@@ -97,85 +98,90 @@ function OTPModal({
       animationType="slide"
       presentationStyle="pageSheet"
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={{ flex: 1, backgroundColor: THEME.background }}
-      >
-        <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
-          <View className="flex-1 px-4">
-            <ModalCloseButton setOpenSheet={confirmClose as any} />
+      <SafeAreaView className="flex-1">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1, backgroundColor: THEME.background }}
+        >
+          <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
+            <View className="flex-1 px-4">
+              <ModalCloseButton setOpenSheet={confirmClose as any} />
 
-            <View className="mt-20 px-2">
-              <Text
-                style={{ color: THEME.textPrimary }}
-                className="text-xl font-bold text-center mb-6"
-              >
-                Enter Code
-              </Text>
-
-              <Text
-                style={{ color: THEME.textSecondary }}
-                className="mb-2 text-center"
-              >
-                Enter the 6-digit code sent to {email}
-              </Text>
-
-              <TextInput
-                value={otp}
-                onChangeText={setOtp}
-                placeholder="123456"
-                keyboardType="number-pad"
-                style={{
-                  backgroundColor: THEME.inputBackground,
-                  color: THEME.textPrimary,
-                  padding: 12,
-                  borderRadius: 8,
-                  borderWidth: 1,
-                  borderColor: THEME.border,
-                  marginVertical: 12,
-                  fontSize: 18,
-                  textAlign: "center",
-                }}
-                placeholderTextColor={THEME.placeholderText}
-                maxLength={6}
-              />
-
-              <View className="mt-4">
-                <TouchableOpacity
-                  onPress={isSubmitting ? undefined : handleSubmit}
-                  disabled={isSubmitting}
-                  activeOpacity={0.8}
-                  style={{ opacity: isSubmitting ? 0.6 : 1 }}
+              <View className="mt-20 px-2">
+                <Text
+                  style={{ color: THEME.textPrimary }}
+                  className="text-xl font-bold text-center mb-6"
                 >
-                  <View
-                    style={{
-                      backgroundColor: THEME.primary,
-                      padding: 12,
-                      borderRadius: 8,
-                      alignItems: "center",
-                      flexDirection: "row",
-                      justifyContent: "center",
-                    }}
+                  Enter Code
+                </Text>
+
+                <Text
+                  style={{ color: THEME.textSecondary }}
+                  className="mb-2 text-center"
+                >
+                  Enter the 6-digit code sent to {email}
+                </Text>
+
+                <TextInput
+                  value={otp}
+                  onChangeText={setOtp}
+                  placeholder="123456"
+                  keyboardType="number-pad"
+                  style={{
+                    backgroundColor: THEME.inputBackground,
+                    color: THEME.textPrimary,
+                    padding: 12,
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: THEME.border,
+                    marginVertical: 12,
+                    fontSize: 18,
+                    textAlign: "center",
+                  }}
+                  placeholderTextColor={THEME.placeholderText}
+                  maxLength={6}
+                />
+
+                <View className="mt-4">
+                  <TouchableOpacity
+                    onPress={isSubmitting ? undefined : handleSubmit}
+                    disabled={isSubmitting}
+                    activeOpacity={0.8}
+                    style={{ opacity: isSubmitting ? 0.6 : 1 }}
                   >
-                    {isSubmitting ? (
-                      <ActivityIndicator
-                        size="small"
-                        color={THEME.textPrimary}
-                      />
-                    ) : (
-                      <Text
-                        style={{ color: THEME.textPrimary, fontWeight: "700" }}
-                      >
-                        Verify Code
-                      </Text>
-                    )}
-                  </View>
-                </TouchableOpacity>
+                    <View
+                      style={{
+                        backgroundColor: THEME.primary,
+                        padding: 12,
+                        borderRadius: 8,
+                        alignItems: "center",
+                        flexDirection: "row",
+                        justifyContent: "center",
+                      }}
+                    >
+                      {isSubmitting ? (
+                        <ActivityIndicator
+                          size="small"
+                          color={THEME.textPrimary}
+                        />
+                      ) : (
+                        <Text
+                          style={{
+                            color: THEME.textPrimary,
+                            fontWeight: "700",
+                          }}
+                        >
+                          Verify Code
+                        </Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
-          </View>
-        </TouchableWithoutFeedback>
-      </KeyboardAvoidingView>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     </Modal>
   );
 }

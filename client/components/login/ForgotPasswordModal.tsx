@@ -10,6 +10,7 @@ import {
   Keyboard,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { useTheme } from "@/hooks/useRedux";
 import { useThemedAlert } from "@/utils/themedAlert";
@@ -72,80 +73,85 @@ function ForgotPasswordModal({
       presentationStyle="pageSheet"
       visible={isModalVisible}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={{ flex: 1, backgroundColor: THEME.background }}
-      >
-        <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
-          <View className="flex-1 px-4 ">
-            <ModalCloseButton setOpenSheet={setModalVisible} />
+      <SafeAreaView className="flex-1">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1, backgroundColor: THEME.background }}
+        >
+          <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
+            <View className="flex-1 px-4 ">
+              <ModalCloseButton setOpenSheet={setModalVisible} />
 
-            <View className="mt-8 px-2">
-              <Text
-                style={{ color: THEME.textPrimary }}
-                className="text-xl  font-bold text-center mb-6"
-              >
-                Forgot Password
-              </Text>
-
-              <Text style={{ color: THEME.textSecondary }} className="mb-2">
-                Enter the email associated with your account
-              </Text>
-
-              <TextInput
-                value={email}
-                onChangeText={setEmail}
-                placeholder="you@example.com"
-                placeholderTextColor={THEME.placeholderText}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                style={{
-                  backgroundColor: THEME.inputBackground,
-                  color: THEME.textPrimary,
-                  padding: 12,
-                  borderRadius: 8,
-                  borderWidth: 1,
-                  borderColor: THEME.border,
-                  marginBottom: 8,
-                }}
-              />
-
-              <View className="mt-6">
-                <TouchableOpacity
-                  onPress={isSubmitting ? undefined : handleSubmit}
-                  activeOpacity={0.85}
-                  disabled={isSubmitting}
-                  style={{ opacity: isSubmitting ? 0.6 : 1 }}
+              <View className="mt-8 px-2">
+                <Text
+                  style={{ color: THEME.textPrimary }}
+                  className="text-xl  font-bold text-center mb-6"
                 >
-                  <LinearGradient
-                    colors={[THEME.primary, THEME.secondary]}
-                    start={[0, 0]}
-                    end={[1, 1]}
-                    style={{
-                      paddingVertical: 12,
-                      borderRadius: 8,
-                      alignItems: "center",
-                    }}
+                  Forgot Password
+                </Text>
+
+                <Text style={{ color: THEME.textSecondary }} className="mb-2">
+                  Enter the email associated with your account
+                </Text>
+
+                <TextInput
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="you@example.com"
+                  placeholderTextColor={THEME.placeholderText}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  style={{
+                    backgroundColor: THEME.inputBackground,
+                    color: THEME.textPrimary,
+                    padding: 12,
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: THEME.border,
+                    marginBottom: 8,
+                  }}
+                />
+
+                <View className="mt-6">
+                  <TouchableOpacity
+                    onPress={isSubmitting ? undefined : handleSubmit}
+                    activeOpacity={0.85}
+                    disabled={isSubmitting}
+                    style={{ opacity: isSubmitting ? 0.6 : 1 }}
                   >
-                    {isSubmitting ? (
-                      <ActivityIndicator
-                        size="small"
-                        color={THEME.textPrimary}
-                      />
-                    ) : (
-                      <Text
-                        style={{ color: THEME.textPrimary, fontWeight: "700" }}
-                      >
-                        Send OTP
-                      </Text>
-                    )}
-                  </LinearGradient>
-                </TouchableOpacity>
+                    <LinearGradient
+                      colors={[THEME.primary, THEME.secondary]}
+                      start={[0, 0]}
+                      end={[1, 1]}
+                      style={{
+                        paddingVertical: 12,
+                        borderRadius: 8,
+                        alignItems: "center",
+                      }}
+                    >
+                      {isSubmitting ? (
+                        <ActivityIndicator
+                          size="small"
+                          color={THEME.textPrimary}
+                        />
+                      ) : (
+                        <Text
+                          style={{
+                            color: THEME.textPrimary,
+                            fontWeight: "700",
+                          }}
+                        >
+                          Send OTP
+                        </Text>
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
-          </View>
-        </TouchableWithoutFeedback>
-      </KeyboardAvoidingView>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     </Modal>
   );
 }

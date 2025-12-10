@@ -10,6 +10,7 @@ import {
   Keyboard,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import ModalCloseButton from "../modalCloseButton";
 import { useTheme, useAppDispatch, useAppSelector } from "@/hooks/useRedux";
 import { useThemedAlert } from "@/utils/themedAlert";
@@ -113,97 +114,102 @@ function ResetPasswordModal({
       animationType="slide"
       presentationStyle="pageSheet"
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={{ flex: 1, backgroundColor: THEME.background }}
-      >
-        <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
-          <View className="flex-1 px-4">
-            <ModalCloseButton setOpenSheet={confirmClose as any} />
+      <SafeAreaView className="flex-1">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1, backgroundColor: THEME.background }}
+        >
+          <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
+            <View className="flex-1 px-4">
+              <ModalCloseButton setOpenSheet={confirmClose as any} />
 
-            <View className="mt-20 px-2">
-              <Text
-                style={{ color: THEME.textPrimary }}
-                className="text-xl font-bold text-center mb-6"
-              >
-                Set New Password
-              </Text>
-
-              <Text
-                style={{ color: THEME.textSecondary }}
-                className="mb-2 text-center"
-              >
-                Enter your new password
-              </Text>
-
-              <TextInput
-                value={newPassword}
-                onChangeText={setNewPassword}
-                placeholder="New password"
-                secureTextEntry
-                placeholderTextColor={THEME.placeholderText}
-                style={{
-                  backgroundColor: THEME.inputBackground,
-                  color: THEME.textPrimary,
-                  padding: 12,
-                  borderRadius: 8,
-                  borderWidth: 1,
-                  borderColor: THEME.border,
-                  marginVertical: 8,
-                }}
-              />
-
-              <TextInput
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                placeholder="Confirm password"
-                secureTextEntry
-                placeholderTextColor={THEME.placeholderText}
-                style={{
-                  backgroundColor: THEME.inputBackground,
-                  color: THEME.textPrimary,
-                  padding: 12,
-                  borderRadius: 8,
-                  borderWidth: 1,
-                  borderColor: THEME.border,
-                  marginVertical: 8,
-                }}
-              />
-
-              <View className="mt-4">
-                <TouchableWithoutFeedback
-                  onPress={isSubmitting ? undefined : handleSubmit}
+              <View className="mt-20 px-2">
+                <Text
+                  style={{ color: THEME.textPrimary }}
+                  className="text-xl font-bold text-center mb-6"
                 >
-                  <View
-                    style={{
-                      backgroundColor: THEME.primary,
-                      padding: 12,
-                      borderRadius: 8,
-                      alignItems: "center",
-                      opacity: isSubmitting ? 0.6 : 1,
-                      flexDirection: "row",
-                      justifyContent: "center",
-                    }}
+                  Set New Password
+                </Text>
+
+                <Text
+                  style={{ color: THEME.textSecondary }}
+                  className="mb-2 text-center"
+                >
+                  Enter your new password
+                </Text>
+
+                <TextInput
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  placeholder="New password"
+                  secureTextEntry
+                  placeholderTextColor={THEME.placeholderText}
+                  style={{
+                    backgroundColor: THEME.inputBackground,
+                    color: THEME.textPrimary,
+                    padding: 12,
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: THEME.border,
+                    marginVertical: 8,
+                  }}
+                />
+
+                <TextInput
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  placeholder="Confirm password"
+                  secureTextEntry
+                  placeholderTextColor={THEME.placeholderText}
+                  style={{
+                    backgroundColor: THEME.inputBackground,
+                    color: THEME.textPrimary,
+                    padding: 12,
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: THEME.border,
+                    marginVertical: 8,
+                  }}
+                />
+
+                <View className="mt-4">
+                  <TouchableWithoutFeedback
+                    onPress={isSubmitting ? undefined : handleSubmit}
                   >
-                    {isSubmitting ? (
-                      <ActivityIndicator
-                        size="small"
-                        color={THEME.textPrimary}
-                      />
-                    ) : (
-                      <Text
-                        style={{ color: THEME.textPrimary, fontWeight: "700" }}
-                      >
-                        Save New Password
-                      </Text>
-                    )}
-                  </View>
-                </TouchableWithoutFeedback>
+                    <View
+                      style={{
+                        backgroundColor: THEME.primary,
+                        padding: 12,
+                        borderRadius: 8,
+                        alignItems: "center",
+                        opacity: isSubmitting ? 0.6 : 1,
+                        flexDirection: "row",
+                        justifyContent: "center",
+                      }}
+                    >
+                      {isSubmitting ? (
+                        <ActivityIndicator
+                          size="small"
+                          color={THEME.textPrimary}
+                        />
+                      ) : (
+                        <Text
+                          style={{
+                            color: THEME.textPrimary,
+                            fontWeight: "700",
+                          }}
+                        >
+                          Save New Password
+                        </Text>
+                      )}
+                    </View>
+                  </TouchableWithoutFeedback>
+                </View>
               </View>
             </View>
-          </View>
-        </TouchableWithoutFeedback>
-      </KeyboardAvoidingView>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     </Modal>
   );
 }
