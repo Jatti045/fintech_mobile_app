@@ -5,7 +5,6 @@ import {
   MaterialIcons,
 } from "@expo/vector-icons";
 import {
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -40,6 +39,7 @@ import TransactionModal from "@/components/transaction/transactionModal";
 import SearchTransaction from "@/components/transaction/searchTransaction";
 import AddNewTransactionButton from "@/components/transaction/addNewTransactionButton";
 import FilterTransaction from "@/components/transaction/filterTransaction";
+import { useThemedAlert } from "@/utils/themedAlert";
 
 export default function Index() {
   // transaction, budget, theme, calendar state
@@ -47,6 +47,7 @@ export default function Index() {
   const budgets = useBudgets();
   const { THEME } = useTheme();
   const calendar = useCalendar();
+  const { showAlert } = useThemedAlert();
 
   // Transaction loading/editing state
   const { isAdding, isEditing } = useTransactionStatus();
@@ -174,7 +175,7 @@ export default function Index() {
   const handleCreateTransaction = async () => {
     // Validate inputs
     if (!name || !date || !selectedCategoryAndId || amount === "") {
-      Alert.alert("Please fill all fields");
+      showAlert({ title: "Please fill all fields" });
       return;
     }
 
@@ -214,9 +215,12 @@ export default function Index() {
       setEditingTransaction(null);
 
       // Show success message
-      Alert.alert("Transaction added successfully!");
+      showAlert({ title: "Transaction added successfully!" });
     } else {
-      Alert.alert("Error", message || "Failed to add transaction");
+      showAlert({
+        title: "Error",
+        message: message || "Failed to add transaction",
+      });
     }
   };
 
@@ -231,10 +235,10 @@ export default function Index() {
         new Date(date).toISOString();
 
     if (noChange) {
-      Alert.alert(
-        "No changes detected",
-        "No changes were made to the transaction."
-      );
+      showAlert({
+        title: "No changes detected",
+        message: "No changes were made to the transaction.",
+      });
       return;
     }
 
@@ -266,13 +270,22 @@ export default function Index() {
       };
 
       if (success) {
-        Alert.alert("Updated", "Transaction updated successfully");
+        showAlert({
+          title: "Updated",
+          message: "Transaction updated successfully",
+        });
         setOpenSheet(false);
       } else {
-        Alert.alert("Error", message || "Failed to update transaction");
+        showAlert({
+          title: "Error",
+          message: message || "Failed to update transaction",
+        });
       }
     } catch (e: any) {
-      Alert.alert("Error", e?.message || "Failed to update transaction");
+      showAlert({
+        title: "Error",
+        message: e?.message || "Failed to update transaction",
+      });
     }
   };
 
@@ -385,10 +398,10 @@ export default function Index() {
                 setOpenSheet(true);
               }}
               onLongPress={() => {
-                Alert.alert(
-                  "Delete Transaction",
-                  "Are you sure you want to delete this transaction?",
-                  [
+                showAlert({
+                  title: "Delete Transaction",
+                  message: "Are you sure you want to delete this transaction?",
+                  buttons: [
                     { text: "Cancel", style: "cancel" },
                     {
                       text: "Delete",
@@ -402,26 +415,28 @@ export default function Index() {
                           const success: boolean = payload?.success ?? false;
                           const message: string = payload?.message ?? "";
                           if (success) {
-                            Alert.alert(
-                              "Deleted",
-                              "Transaction deleted successfully."
-                            );
+                            showAlert({
+                              title: "Deleted",
+                              message: "Transaction deleted successfully.",
+                            });
                           } else {
-                            Alert.alert(
-                              "Error",
-                              message || "Failed to delete transaction"
-                            );
+                            showAlert({
+                              title: "Error",
+                              message:
+                                message || "Failed to delete transaction",
+                            });
                           }
                         } catch (err: any) {
-                          Alert.alert(
-                            "Error",
-                            err.message || "Failed to delete transaction"
-                          );
+                          showAlert({
+                            title: "Error",
+                            message:
+                              err.message || "Failed to delete transaction",
+                          });
                         }
                       },
                     },
-                  ]
-                );
+                  ],
+                });
               }}
             >
               <View

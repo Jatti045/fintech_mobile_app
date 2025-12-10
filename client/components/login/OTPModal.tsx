@@ -4,7 +4,6 @@ import {
   View,
   Text,
   TextInput,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   TouchableWithoutFeedback,
@@ -14,6 +13,7 @@ import {
 } from "react-native";
 import ModalCloseButton from "../modalCloseButton";
 import { useTheme, useAppDispatch, useAppSelector } from "@/hooks/useRedux";
+import { useThemedAlert } from "@/utils/themedAlert";
 import { resetPassword, selectIsLoading } from "@/store/slices/userSlice";
 
 function OTPModal({
@@ -28,6 +28,7 @@ function OTPModal({
   onVerified: (otp: string) => void;
 }) {
   const { THEME } = useTheme();
+  const { showAlert } = useThemedAlert();
   const [otp, setOtp] = useState("");
   const prev = useRef(visible);
   const dispatch = useAppDispatch();
@@ -42,23 +43,24 @@ function OTPModal({
   }, [visible]);
 
   const confirmClose = () => {
-    Alert.alert(
-      "Discard code?",
-      "If you leave now the current code will be invalid and you'll need to request a new one.",
-      [
+    showAlert({
+      title: "Discard code?",
+      message:
+        "If you leave now the current code will be invalid and you'll need to request a new one.",
+      buttons: [
         { text: "Cancel", style: "cancel" },
         {
           text: "Leave",
           style: "destructive",
           onPress: () => setVisible(false),
         },
-      ]
-    );
+      ],
+    });
   };
 
   const handleSubmit = async () => {
     if (!otp.trim()) {
-      Alert.alert("Please enter the code");
+      showAlert({ title: "Please enter the code" });
       return;
     }
 
@@ -73,13 +75,17 @@ function OTPModal({
       if (action?.success) {
         onVerified(otp);
       } else {
-        Alert.alert("Invalid code", action?.message || "Please try again");
+        showAlert({
+          title: "Invalid code",
+          message: action?.message || "Please try again",
+        });
       }
     } catch (err: any) {
-      Alert.alert(
-        "Invalid code",
-        err?.message || err?.response?.data?.message || "Please try again"
-      );
+      showAlert({
+        title: "Invalid code",
+        message:
+          err?.message || err?.response?.data?.message || "Please try again",
+      });
     } finally {
       setIsSubmitting(false);
     }

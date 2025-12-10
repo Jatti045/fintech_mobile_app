@@ -6,7 +6,6 @@ import {
   ScrollView,
   Switch,
   ActivityIndicator,
-  Alert,
   Modal,
   TextInput,
 } from "react-native";
@@ -29,6 +28,7 @@ import Loader from "@/utils/loader";
 import { useTheme } from "@/hooks/useRedux";
 import { setTheme } from "@/store/slices/themeSlice";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useThemedAlert } from "@/utils/themedAlert";
 
 export default function ProfileScreen() {
   const [uploading, setUploading] = useState(false);
@@ -36,11 +36,12 @@ export default function ProfileScreen() {
   const dispatch = useAppDispatch();
   const { user, error } = useAuth();
   const { THEME, selectedTheme } = useTheme();
+  const { showAlert } = useThemedAlert();
 
   // Show error alerts for Redux state errors
   useEffect(() => {
     if (error) {
-      Alert.alert("Error", error);
+      showAlert({ title: "Error", message: error });
     }
   }, [error]);
 
@@ -98,10 +99,10 @@ export default function ProfileScreen() {
     const permissionResult =
       await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
-      Alert.alert(
-        "Permission Required",
-        "Permission to access gallery is required!"
-      );
+      showAlert({
+        title: "Permission Required",
+        message: "Permission to access gallery is required!",
+      });
       return;
     }
     // Pick image (use MediaType array per new API)
@@ -129,14 +130,18 @@ export default function ProfileScreen() {
           router.push("/(tabs)/profile");
           /* Alert.alert("Success", "Profile picture uploaded successfully!"); */
         } else if (uploadProfilePicture.rejected.match(resultAction)) {
-          Alert.alert(
-            "Upload Failed",
-            (resultAction.payload as string) ||
-              "Failed to upload profile picture"
-          );
+          showAlert({
+            title: "Upload Failed",
+            message:
+              (resultAction.payload as string) ||
+              "Failed to upload profile picture",
+          });
         }
       } catch (error) {
-        Alert.alert("Upload Failed", "An unexpected error occurred");
+        showAlert({
+          title: "Upload Failed",
+          message: "An unexpected error occurred",
+        });
       } finally {
         setUploading(false);
       }
@@ -144,24 +149,28 @@ export default function ProfileScreen() {
   };
 
   const handleLogout = () => {
-    Alert.alert("Confirm Logout", "Are you sure you want to log out?", [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
-      {
-        text: "Log Out",
-        style: "destructive",
-        onPress: () => dispatch(logoutUser()),
-      },
-    ]);
+    showAlert({
+      title: "Confirm Logout",
+      message: "Are you sure you want to log out?",
+      buttons: [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Log Out",
+          style: "destructive",
+          onPress: () => dispatch(logoutUser()),
+        },
+      ],
+    });
   };
 
   const handleDeleteAccount = () => {
-    Alert.alert(
-      "Confirm Delete Account",
-      "Are you sure you want to delete your account?",
-      [
+    showAlert({
+      title: "Confirm Delete Account",
+      message: "Are you sure you want to delete your account?",
+      buttons: [
         {
           text: "Cancel",
           style: "cancel",
@@ -171,10 +180,11 @@ export default function ProfileScreen() {
           style: "destructive",
           onPress: () => {
             // Second layer of protection: irreversible warning
-            Alert.alert(
-              "Delete Account — Irreversible",
-              "This action is permanent. Once you delete your account, all your data will be lost and cannot be recovered. Are you absolutely sure you want to continue?",
-              [
+            showAlert({
+              title: "Delete Account — Irreversible",
+              message:
+                "This action is permanent. Once you delete your account, all your data will be lost and cannot be recovered. Are you absolutely sure you want to continue?",
+              buttons: [
                 { text: "Cancel", style: "cancel" },
                 {
                   text: "Delete Account",
@@ -190,32 +200,36 @@ export default function ProfileScreen() {
                         message: string;
                       };
                       if (success) {
-                        Alert.alert(
-                          "Account Deleted",
-                          "Your account has been deleted successfully."
-                        );
+                        showAlert({
+                          title: "Account Deleted",
+                          message:
+                            "Your account has been deleted successfully.",
+                        });
                         router.push("/login");
                       } else {
-                        Alert.alert(
-                          "Deletion Failed",
-                          message || "Failed to delete account."
-                        );
+                        showAlert({
+                          title: "Deletion Failed",
+                          message: message || "Failed to delete account.",
+                        });
                       }
                     }
                   },
                 },
-              ]
-            );
+              ],
+            });
           },
         },
-      ]
-    );
+      ],
+    });
   };
 
   const handleThemeSelect = async (themeName: string) => {
     dispatch(setTheme(themeName));
     await AsyncStorage.setItem("selectedTheme", themeName);
-    Alert.alert("Theme Changed", `Theme changed to ${themeName}`);
+    showAlert({
+      title: "Theme Changed",
+      message: `Theme changed to ${themeName}`,
+    });
   };
 
   return (
@@ -267,10 +281,11 @@ export default function ProfileScreen() {
                   <TouchableOpacity
                     onPress={handlePickImage}
                     onLongPress={() => {
-                      Alert.alert(
-                        "Delete Profile Picture",
-                        "Are you sure you want to delete your profile picture?",
-                        [
+                      showAlert({
+                        title: "Delete Profile Picture",
+                        message:
+                          "Are you sure you want to delete your profile picture?",
+                        buttons: [
                           { text: "Cancel", style: "cancel" },
                           {
                             text: "Delete",
@@ -283,30 +298,32 @@ export default function ProfileScreen() {
                                   deleteProfilePicture(user.id)
                                 );
                                 if (deleteProfilePicture.fulfilled.match(res)) {
-                                  Alert.alert(
-                                    "Deleted",
-                                    "Profile picture deleted."
-                                  );
+                                  showAlert({
+                                    title: "Deleted",
+                                    message: "Profile picture deleted.",
+                                  });
                                 } else {
-                                  Alert.alert(
-                                    "Deletion Failed",
-                                    (res.payload as string) ||
-                                      "Failed to delete profile picture"
-                                  );
+                                  showAlert({
+                                    title: "Deletion Failed",
+                                    message:
+                                      (res.payload as string) ||
+                                      "Failed to delete profile picture",
+                                  });
                                 }
                               } catch (e: any) {
-                                Alert.alert(
-                                  "Deletion Failed",
-                                  e?.message ||
-                                    "Failed to delete profile picture"
-                                );
+                                showAlert({
+                                  title: "Deletion Failed",
+                                  message:
+                                    e?.message ||
+                                    "Failed to delete profile picture",
+                                });
                               } finally {
                                 setDeleting(false);
                               }
                             },
                           },
-                        ]
-                      );
+                        ],
+                      });
                     }}
                   >
                     <Image
@@ -595,11 +612,11 @@ export default function ProfileScreen() {
                   onPress={async () => {
                     // Basic validation
                     if (!currentPassword || !newPassword || !confirmPassword) {
-                      Alert.alert("Please fill all fields");
+                      showAlert({ title: "Please fill all fields" });
                       return;
                     }
                     if (newPassword !== confirmPassword) {
-                      Alert.alert("New passwords do not match");
+                      showAlert({ title: "New passwords do not match" });
                       return;
                     }
                     setPwSaving(true);
@@ -612,23 +629,24 @@ export default function ProfileScreen() {
                         })
                       );
                       if (changePassword.fulfilled.match(response)) {
-                        Alert.alert(
-                          "Success",
-                          response.payload?.message || "Password changed"
-                        );
+                        showAlert({
+                          title: "Success",
+                          message:
+                            response.payload?.message || "Password changed",
+                        });
                         closeChangeModal(false);
                       } else {
                         const err =
                           response.payload ||
                           response.error?.message ||
                           "Failed to change password";
-                        Alert.alert("Error", err);
+                        showAlert({ title: "Error", message: err });
                       }
                     } catch (e: any) {
-                      Alert.alert(
-                        "Error",
-                        e?.message || "Failed to change password"
-                      );
+                      showAlert({
+                        title: "Error",
+                        message: e?.message || "Failed to change password",
+                      });
                     } finally {
                       setPwSaving(false);
                     }

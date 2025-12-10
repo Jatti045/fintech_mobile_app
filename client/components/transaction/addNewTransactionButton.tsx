@@ -1,7 +1,8 @@
 import { useTheme } from "@/hooks/useRedux";
+import { useThemedAlert } from "@/utils/themedAlert";
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { Alert, Text, TouchableOpacity, View } from "react-native";
+import { Text, TouchableOpacity, View } from "react-native";
 
 function AddNewTransactionButton({
   setOpenSheet,
@@ -11,16 +12,18 @@ function AddNewTransactionButton({
   budgets: Array<any>;
 }) {
   const { THEME } = useTheme();
+  const { showAlert } = useThemedAlert();
   return (
     <View className="absolute bottom-0 right-0 p-4">
       <TouchableOpacity
         onPress={() => {
           // Check for existing budgets in the selected month
           if (!budgets || budgets.length === 0) {
-            Alert.alert(
-              "No budgets available",
-              "No budgets exist for this month. Please create a budget first."
-            );
+            showAlert({
+              title: "No budgets available",
+              message:
+                "No budgets exist for this month. Please create a budget first.",
+            });
             return;
           }
           setOpenSheet(true);

@@ -6,7 +6,6 @@ import {
   Image,
   Modal,
   TouchableOpacity,
-  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
@@ -15,6 +14,7 @@ import {
   useBudgets,
   useCalendar,
 } from "@/hooks/useRedux";
+import { useThemedAlert } from "@/utils/themedAlert";
 import { useAppDispatch } from "@/store";
 import {
   setMonthYear,
@@ -147,6 +147,7 @@ const TopCategoriesChart = ({ label, THEME, totals, budgets }: any) => {
 
 export default function Index() {
   const { THEME } = useTheme();
+  const { showAlert } = useThemedAlert();
   const transactions = useTransactions();
   const budgets = useBudgets();
   const calendar = useCalendar();
@@ -358,10 +359,11 @@ export default function Index() {
             onPress={() => {
               // Match exact Alert behavior from AddNewTransactionButton when no budgets
               if (!filteredBudgets || filteredBudgets.length === 0) {
-                Alert.alert(
-                  "No budgets available",
-                  "No budgets exist for this month. Please create a budget first."
-                );
+                showAlert({
+                  title: "No budgets available",
+                  message:
+                    "No budgets exist for this month. Please create a budget first.",
+                });
                 return;
               }
               setOpenTxModal(true);
@@ -574,12 +576,12 @@ export default function Index() {
         handleCreateTransaction={async () => {
           // basic validation
           if (!txName.trim() || !txAmount.trim()) {
-            Alert.alert("Please enter a name and amount");
+            showAlert({ title: "Please enter a name and amount" });
             return;
           }
           const amt = Number(txAmount);
           if (isNaN(amt) || amt <= 0) {
-            Alert.alert("Please enter a valid numeric amount");
+            showAlert({ title: "Please enter a valid numeric amount" });
             return;
           }
 
@@ -600,7 +602,7 @@ export default function Index() {
             const response: any = await dispatch(createTransaction(payload));
             const { success, message } = response.payload ?? {};
             if (success) {
-              Alert.alert("Success", "Transaction created");
+              showAlert({ title: "Success", message: "Transaction created" });
               // reset fields
               setTxName("");
               setTxAmount("");
@@ -618,9 +620,15 @@ export default function Index() {
               );
               return;
             }
-            Alert.alert("Error", message || "Failed to create transaction");
+            showAlert({
+              title: "Error",
+              message: message || "Failed to create transaction",
+            });
           } catch (err: any) {
-            Alert.alert("Error", err.message || "Failed to create transaction");
+            showAlert({
+              title: "Error",
+              message: err.message || "Failed to create transaction",
+            });
           }
         }}
       />
@@ -635,13 +643,13 @@ export default function Index() {
         saving={budgetSaving}
         handleCreateBudget={async () => {
           if (!budgetCategory.trim() || !budgetLimit.trim()) {
-            Alert.alert("Please enter category and limit");
+            showAlert({ title: "Please enter category and limit" });
             return;
           }
           const parsedCategory = String(budgetCategory.trim());
           const parsedLimit = Number(budgetLimit);
           if (isNaN(parsedLimit) || parsedLimit <= 0) {
-            Alert.alert("Please enter a valid numeric limit");
+            showAlert({ title: "Please enter a valid numeric limit" });
             return;
           }
           const currentMonth = calendar.month;
@@ -658,12 +666,21 @@ export default function Index() {
             );
             const { success, message } = response.payload ?? {};
             if (!success) {
-              Alert.alert("Error", message || "Failed to save");
+              showAlert({
+                title: "Error",
+                message: message || "Failed to save",
+              });
               return;
             }
-            Alert.alert("Success", "Budget created successfully");
+            showAlert({
+              title: "Success",
+              message: "Budget created successfully",
+            });
           } catch (err: any) {
-            Alert.alert("Error", err.message || "Failed to save");
+            showAlert({
+              title: "Error",
+              message: err.message || "Failed to save",
+            });
           } finally {
             setBudgetSaving(false);
             setOpenBudgetModal(false);

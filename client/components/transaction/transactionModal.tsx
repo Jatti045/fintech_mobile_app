@@ -1,4 +1,5 @@
 import { useAppDispatch, useTheme } from "@/hooks/useRedux";
+import { useThemedAlert } from "@/utils/themedAlert";
 import { Feather, FontAwesome, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import {
@@ -10,7 +11,6 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Alert,
 } from "react-native";
 import { JSX } from "react/jsx-runtime";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -62,6 +62,7 @@ function TransactionModal({
   onClose?: () => void;
 }) {
   const { THEME } = useTheme();
+  const { showAlert } = useThemedAlert();
   const [showPicker, setShowPicker] = useState(false);
   const dispatch = useAppDispatch();
 
@@ -359,7 +360,7 @@ function TransactionModal({
                       amount === "" ||
                       !selectedCategoryAndId?.name
                     ) {
-                      Alert.alert("Please fill all fields");
+                      showAlert({ title: "Please fill all fields" });
                       return;
                     }
 

@@ -8,6 +8,7 @@ import { ActivityIndicator, View, Text } from "react-native";
 import { loadThemeFromStorage } from "@/store/slices/themeSlice";
 import { fetchTransaction } from "@/store/slices/transactionSlice";
 import { fetchBudgets } from "@/store/slices/budgetSlice";
+import { AlertProvider } from "@/utils/themedAlert";
 
 function AppRoutes() {
   const dispatch = useAppDispatch();
@@ -61,7 +62,9 @@ function AppRoutes() {
 export default function RootLayout() {
   return (
     <Provider store={store}>
-      <AppRoutes />
+      <AlertProvider>
+        <AppRoutes />
+      </AlertProvider>
     </Provider>
   );
 }

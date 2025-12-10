@@ -4,7 +4,6 @@ import {
   View,
   Text,
   TextInput,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   TouchableWithoutFeedback,
@@ -13,6 +12,7 @@ import {
 } from "react-native";
 import ModalCloseButton from "../modalCloseButton";
 import { useTheme, useAppDispatch, useAppSelector } from "@/hooks/useRedux";
+import { useThemedAlert } from "@/utils/themedAlert";
 import { resetPassword, selectIsLoading } from "@/store/slices/userSlice";
 import { router } from "expo-router";
 
@@ -28,6 +28,7 @@ function ResetPasswordModal({
   otp: string;
 }) {
   const { THEME } = useTheme();
+  const { showAlert } = useThemedAlert();
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const dispatch = useAppDispatch();
@@ -44,34 +45,35 @@ function ResetPasswordModal({
   }, [visible]);
 
   const confirmClose = () => {
-    Alert.alert(
-      "Discard changes?",
-      "If you leave now the reset will be cancelled and you'll need to request a new code to reset your password.",
-      [
+    showAlert({
+      title: "Discard changes?",
+      message:
+        "If you leave now the reset will be cancelled and you'll need to request a new code to reset your password.",
+      buttons: [
         { text: "Cancel", style: "cancel" },
         {
           text: "Leave",
           style: "destructive",
           onPress: () => setVisible(false),
         },
-      ]
-    );
+      ],
+    });
   };
 
   const handleSubmit = async () => {
     if (!newPassword || !confirmPassword) {
-      Alert.alert("Please fill both password fields");
+      showAlert({ title: "Please fill both password fields" });
       return;
     }
     if (newPassword.length < 6) {
-      Alert.alert(
-        "Password too short",
-        "Password must be at least 6 characters."
-      );
+      showAlert({
+        title: "Password too short",
+        message: "Password must be at least 6 characters.",
+      });
       return;
     }
     if (newPassword !== confirmPassword) {
-      Alert.alert("Passwords do not match");
+      showAlert({ title: "Passwords do not match" });
       return;
     }
 
@@ -82,14 +84,24 @@ function ResetPasswordModal({
       ).unwrap();
 
       if (action?.success) {
-        Alert.alert("Success", "Password reset successful", [
-          { text: "OK", onPress: () => router.replace("/(auth)/login") },
-        ]);
+        showAlert({
+          title: "Success",
+          message: "Password reset successful",
+          buttons: [
+            { text: "OK", onPress: () => router.replace("/(auth)/login") },
+          ],
+        });
       } else {
-        Alert.alert("Error", action?.message || "Failed to reset password");
+        showAlert({
+          title: "Error",
+          message: action?.message || "Failed to reset password",
+        });
       }
     } catch (err: any) {
-      Alert.alert("Error", err?.message || "Failed to reset password");
+      showAlert({
+        title: "Error",
+        message: err?.message || "Failed to reset password",
+      });
     } finally {
       setIsSubmitting(false);
     }

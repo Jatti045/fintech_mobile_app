@@ -4,7 +4,6 @@ import {
   View,
   TextInput,
   TouchableOpacity,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   TouchableWithoutFeedback,
@@ -13,6 +12,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useTheme } from "@/hooks/useRedux";
+import { useThemedAlert } from "@/utils/themedAlert";
 import { useState, useRef, useEffect } from "react";
 import ModalCloseButton from "../modalCloseButton";
 import Loader from "@/utils/loader";
@@ -27,6 +27,7 @@ function ForgotPasswordModal({
   onSubmit?: (email: string) => Promise<void> | void;
 }) {
   const { THEME } = useTheme();
+  const { showAlert } = useThemedAlert();
   const [email, setEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const prevOpen = useRef(isModalVisible);
@@ -41,13 +42,13 @@ function ForgotPasswordModal({
   const handleSubmit = async () => {
     const trimmed = email.trim();
     if (!trimmed) {
-      Alert.alert("Please enter your email");
+      showAlert({ title: "Please enter your email" });
       return;
     }
     // basic email pattern
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailPattern.test(trimmed)) {
-      Alert.alert("Please enter a valid email address");
+      showAlert({ title: "Please enter a valid email address" });
       return;
     }
 
@@ -56,7 +57,10 @@ function ForgotPasswordModal({
       if (onSubmit) await onSubmit(trimmed);
       // Close modal and let parent show the generic, non-enumerating message
     } catch (err: any) {
-      Alert.alert("Error", err?.message || "Failed to submit");
+      showAlert({
+        title: "Error",
+        message: err?.message || "Failed to submit",
+      });
     } finally {
       setIsSubmitting(false);
     }

@@ -6,7 +6,6 @@ import {
   ScrollView,
   Modal,
   TextInput,
-  Alert,
   Touchable,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -27,6 +26,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { capitalizeFirst, formatDate, getCategoryIcon } from "@/utils/helper";
 import MaskedView from "@react-native-masked-view/masked-view";
 import BudgetModal from "@/components/budget/BudgetModal";
+import { useThemedAlert } from "@/utils/themedAlert";
 
 export default function Goals() {
   const dispatch = useAppDispatch();
@@ -34,6 +34,7 @@ export default function Goals() {
   const transactions = useTransactions();
   const { THEME } = useTheme();
   const calendar = useCalendar();
+  const { showAlert } = useThemedAlert();
 
   const [openSheet, setOpenSheet] = React.useState(false);
   const [category, setCategory] = React.useState("");
@@ -44,7 +45,7 @@ export default function Goals() {
   const handleCreateBudget = async () => {
     // validation
     if (!category.trim() || !limit.trim()) {
-      Alert.alert("Please enter category and limit");
+      showAlert({ title: "Please enter category and limit" });
       return;
     }
 
@@ -52,7 +53,7 @@ export default function Goals() {
 
     const parsedLimit = Number(limit);
     if (isNaN(parsedLimit) || parsedLimit <= 0) {
-      Alert.alert("Please enter a valid numeric limit");
+      showAlert({ title: "Please enter a valid numeric limit" });
       return;
     }
     const currentMonth = calendar.month;
@@ -74,12 +75,12 @@ export default function Goals() {
       };
 
       if (!success) {
-        Alert.alert("Error", message || "Failed to save");
+        showAlert({ title: "Error", message: message || "Failed to save" });
         return;
       }
-      Alert.alert("Success", "Budget created successfully");
+      showAlert({ title: "Success", message: "Budget created successfully" });
     } catch (err: any) {
-      Alert.alert("Error", err.message || "Failed to save");
+      showAlert({ title: "Error", message: err.message || "Failed to save" });
     } finally {
       setSaving(false);
       setOpenSheet(false);
@@ -103,14 +104,20 @@ export default function Goals() {
         message: string;
       };
       if (!success) {
-        Alert.alert("Error", message || "Failed to update budget");
+        showAlert({
+          title: "Error",
+          message: message || "Failed to update budget",
+        });
         return;
       }
-      Alert.alert("Success", "Budget updated successfully");
+      showAlert({ title: "Success", message: "Budget updated successfully" });
       setOpenSheet(false);
       resetForm();
     } catch (err: any) {
-      Alert.alert("Error", err?.message || "Failed to update budget");
+      showAlert({
+        title: "Error",
+        message: err?.message || "Failed to update budget",
+      });
     } finally {
       setSaving(false);
     }
@@ -122,18 +129,18 @@ export default function Goals() {
       const attached = transactions.filter((t: any) => t.budgetId === budgetId);
       const attachedCount = attached.length;
       if (attachedCount > 0) {
-        Alert.alert(
-          "Cannot delete budget",
-          `This budget has ${attachedCount} transaction${attachedCount > 1 ? "s" : ""} attached. Remove or reassign those transactions first.`
-        );
+        showAlert({
+          title: "Cannot delete budget",
+          message: `This budget has ${attachedCount} transaction${attachedCount > 1 ? "s" : ""} attached. Remove or reassign those transactions first.`,
+        });
         return;
       }
 
       // proceed with confirmation if no attached transactions
-      Alert.alert(
-        "Delete Budget",
-        "Are you sure you want to delete this budget?",
-        [
+      showAlert({
+        title: "Delete Budget",
+        message: "Are you sure you want to delete this budget?",
+        buttons: [
           {
             text: "Cancel",
             style: "cancel",
@@ -149,23 +156,32 @@ export default function Goals() {
                   message: string;
                 };
                 if (success) {
-                  Alert.alert("Success", "Budget deleted successfully");
+                  showAlert({
+                    title: "Success",
+                    message: "Budget deleted successfully",
+                  });
                   return;
                 }
-                Alert.alert("Error", message || "Failed to delete budget");
+                showAlert({
+                  title: "Error",
+                  message: message || "Failed to delete budget",
+                });
               } catch (err: any) {
-                Alert.alert("Error", err.message || "Failed to delete budget");
+                showAlert({
+                  title: "Error",
+                  message: err.message || "Failed to delete budget",
+                });
               }
             },
           },
-        ]
-      );
+        ],
+      });
     } catch (e: any) {
       // fallback to previous delete flow in case of an unexpected error
-      Alert.alert(
-        "Delete Budget",
-        "Are you sure you want to delete this budget?",
-        [
+      showAlert({
+        title: "Delete Budget",
+        message: "Are you sure you want to delete this budget?",
+        buttons: [
           {
             text: "Cancel",
             style: "cancel",
@@ -181,17 +197,26 @@ export default function Goals() {
                   message: string;
                 };
                 if (success) {
-                  Alert.alert("Success", "Budget deleted successfully");
+                  showAlert({
+                    title: "Success",
+                    message: "Budget deleted successfully",
+                  });
                   return;
                 }
-                Alert.alert("Error", message || "Failed to delete budget");
+                showAlert({
+                  title: "Error",
+                  message: message || "Failed to delete budget",
+                });
               } catch (err: any) {
-                Alert.alert("Error", err.message || "Failed to delete budget");
+                showAlert({
+                  title: "Error",
+                  message: err.message || "Failed to delete budget",
+                });
               }
             },
           },
-        ]
-      );
+        ],
+      });
     }
   };
 

@@ -7,7 +7,6 @@ import {
   ScrollView,
   Platform,
   Dimensions,
-  Alert,
   Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -23,6 +22,7 @@ import {
   selectLoginError,
   clearLoginError,
 } from "@/store/slices/userSlice";
+import { useThemedAlert } from "@/utils/themedAlert";
 import { forgotPassword } from "@/store/slices/userSlice";
 import ForgotPasswordModal from "@/components/login/ForgotPasswordModal";
 import OTPModal from "@/components/login/OTPModal";
@@ -35,6 +35,7 @@ const isTablet = width > 768;
 
 const LoginScreen = () => {
   const { THEME } = useTheme();
+  const { showAlert } = useThemedAlert();
   const insets = useSafeAreaInsets();
   const dispatch = useAppDispatch();
   const isLoading = useAppSelector(selectIsLoading);
@@ -62,20 +63,26 @@ const LoginScreen = () => {
     try {
       // Validation
       if (!email.trim() || !password.trim()) {
-        Alert.alert("Validation Error", "Please fill in all fields");
+        showAlert({
+          title: "Validation Error",
+          message: "Please fill in all fields",
+        });
         return;
       }
 
       if (!validateEmail(email)) {
-        Alert.alert("Validation Error", "Please enter a valid email address");
+        showAlert({
+          title: "Validation Error",
+          message: "Please enter a valid email address",
+        });
         return;
       }
 
       if (password.length < 6) {
-        Alert.alert(
-          "Validation Error",
-          "Password must be at least 6 characters"
-        );
+        showAlert({
+          title: "Validation Error",
+          message: "Password must be at least 6 characters",
+        });
         return;
       }
 
@@ -93,11 +100,12 @@ const LoginScreen = () => {
     } catch (error) {
       console.error("Login error:", error);
       // Error is already handled by Redux state, no need to set local error
-      Alert.alert(
-        "Login Failed",
-        (error as string) ||
-          "Network error. Please check your connection and try again."
-      );
+      showAlert({
+        title: "Login Failed",
+        message:
+          (error as string) ||
+          "Network error. Please check your connection and try again.",
+      });
     }
   };
 
@@ -287,7 +295,6 @@ const LoginScreen = () => {
                     shadowOffset: { width: 0, height: 4 },
                     shadowOpacity: 0.3,
                     shadowRadius: 8,
-                    elevation: 8,
                   }}
                 >
                   <Text
@@ -343,7 +350,9 @@ const LoginScreen = () => {
           setForgotEmail(pendingForgotEmail);
           setOtpModalVisible(true);
           setTimeout(() => {
-            Alert.alert("If an account exists, an OTP was sent to your email.");
+            showAlert({
+              title: "If an account exists, an OTP was sent to your email.",
+            });
           }, 300);
           setPendingForgotEmail(null);
           return null;

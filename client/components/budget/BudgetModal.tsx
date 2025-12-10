@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { useTheme } from "@/hooks/useRedux";
+import { useThemedAlert } from "@/utils/themedAlert";
 import {
   Modal,
   ScrollView,
@@ -7,7 +8,6 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Alert,
 } from "react-native";
 import ModalCloseButton from "../modalCloseButton";
 import { LinearGradient } from "expo-linear-gradient";
@@ -42,6 +42,7 @@ function BudgetModal({
   onClose?: () => void;
 }) {
   const { THEME } = useTheme();
+  const { showAlert } = useThemedAlert();
 
   const prevOpenRef = useRef(openSheet);
   useEffect(() => {
@@ -198,13 +199,13 @@ function BudgetModal({
                 if (editingBudget && handleUpdateBudget) {
                   // basic validation
                   if (!category.trim() || !limit.trim()) {
-                    Alert.alert("Please enter category and limit");
+                    showAlert({ title: "Please enter category and limit" });
                     return;
                   }
                   const parsedCategory = category.trim();
                   const parsedLimit = Number(limit);
                   if (isNaN(parsedLimit) || parsedLimit < 0) {
-                    Alert.alert("Please enter a valid numeric limit");
+                    showAlert({ title: "Please enter a valid numeric limit" });
                     return;
                   }
 
@@ -213,7 +214,10 @@ function BudgetModal({
                     String(parsedCategory) === String(editingBudget.category) &&
                     Number(parsedLimit) === Number(editingBudget.limit);
                   if (noChange) {
-                    Alert.alert("No changes detected", "Nothing to update");
+                    showAlert({
+                      title: "No changes detected",
+                      message: "Nothing to update",
+                    });
                     return;
                   }
 
@@ -224,7 +228,10 @@ function BudgetModal({
                     });
                     if (onClose) onClose();
                   } catch (err: any) {
-                    Alert.alert("Error", err?.message || "Failed to update");
+                    showAlert({
+                      title: "Error",
+                      message: err?.message || "Failed to update",
+                    });
                   }
                   return;
                 }

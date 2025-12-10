@@ -7,7 +7,6 @@ import {
   ScrollView,
   Platform,
   Dimensions,
-  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import React, { useState } from "react";
@@ -16,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Link, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@/hooks/useRedux";
+import { useThemedAlert } from "@/utils/themedAlert";
 import {
   clearSignupError,
   signupUser,
@@ -31,6 +31,7 @@ const isTablet = width > 768;
 
 const SignUpScreen = () => {
   const { THEME } = useTheme();
+  const { showAlert } = useThemedAlert();
   const insets = useSafeAreaInsets();
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -57,25 +58,34 @@ const SignUpScreen = () => {
         !password.trim() ||
         !confirmPassword.trim()
       ) {
-        Alert.alert("Validation Error", "Please fill in all fields");
+        showAlert({
+          title: "Validation Error",
+          message: "Please fill in all fields",
+        });
         return;
       }
 
       if (!validateEmail(email)) {
-        Alert.alert("Validation Error", "Please enter a valid email address");
+        showAlert({
+          title: "Validation Error",
+          message: "Please enter a valid email address",
+        });
         return;
       }
 
       if (password.length < 6) {
-        Alert.alert(
-          "Validation Error",
-          "Password must be at least 6 characters"
-        );
+        showAlert({
+          title: "Validation Error",
+          message: "Password must be at least 6 characters",
+        });
         return;
       }
 
       if (password !== confirmPassword) {
-        Alert.alert("Validation Error", "Passwords do not match");
+        showAlert({
+          title: "Validation Error",
+          message: "Passwords do not match",
+        });
         return;
       }
 
@@ -93,21 +103,22 @@ const SignUpScreen = () => {
       // Debugging log
       console.log("Signup response:", response);
 
-      Alert.alert(
-        "Signup Successful",
-        "Your account has been created. Please log in."
-      );
+      showAlert({
+        title: "Signup Successful",
+        message: "Your account has been created. Please log in.",
+      });
 
       // Navigate to login on successful signup
       router.replace("/(auth)/login");
     } catch (error) {
       console.error("Signup error:", error);
       // Error is already handled by Redux state, no need to set local error
-      Alert.alert(
-        "Signup Failed",
-        (error as string) ||
-          "Network error. Please check your connection and try again."
-      );
+      showAlert({
+        title: "Signup Failed",
+        message:
+          (error as string) ||
+          "Network error. Please check your connection and try again.",
+      });
     }
   };
 
@@ -381,7 +392,6 @@ const SignUpScreen = () => {
                     shadowOffset: { width: 0, height: 4 },
                     shadowOpacity: 0.3,
                     shadowRadius: 8,
-                    elevation: 8,
                   }}
                 >
                   <Text
