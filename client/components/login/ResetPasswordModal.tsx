@@ -112,7 +112,7 @@ function ResetPasswordModal({
     <Modal
       visible={visible}
       animationType="slide"
-      presentationStyle="pageSheet"
+      presentationStyle="fullScreen"
     >
       <SafeAreaView className="flex-1">
         <KeyboardAvoidingView

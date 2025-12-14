@@ -30,10 +30,16 @@ function InformationModal({
     <Modal
       visible={helpOpen}
       animationType="slide"
+      transparent={true}
       presentationStyle="pageSheet"
     >
       <SafeAreaView
-        style={{ flex: 1, backgroundColor: THEME.background, padding: 18 }}
+        style={{
+          flex: 1,
+          backgroundColor: THEME.background,
+          padding: 18,
+          position: "relative",
+        }}
       >
         <View
           style={{

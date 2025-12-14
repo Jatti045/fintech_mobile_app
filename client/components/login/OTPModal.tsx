@@ -16,6 +16,7 @@ import ModalCloseButton from "../modalCloseButton";
 import { useTheme, useAppDispatch, useAppSelector } from "@/hooks/useRedux";
 import { useThemedAlert } from "@/utils/themedAlert";
 import { resetPassword, selectIsLoading } from "@/store/slices/userSlice";
+import { LinearGradient } from "expo-linear-gradient";
 
 function OTPModal({
   visible,
@@ -94,11 +95,19 @@ function OTPModal({
 
   return (
     <Modal
+      transparent={true}
       visible={visible}
       animationType="slide"
       presentationStyle="pageSheet"
     >
-      <SafeAreaView className="flex-1">
+      <SafeAreaView
+        style={{
+          flex: 1,
+          backgroundColor: THEME.background,
+          padding: 18,
+          position: "relative",
+        }}
+      >
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={{ flex: 1, backgroundColor: THEME.background }}
@@ -107,76 +116,74 @@ function OTPModal({
             <View className="flex-1 px-4">
               <ModalCloseButton setOpenSheet={confirmClose as any} />
 
-              <View className="mt-20 px-2">
-                <Text
-                  style={{ color: THEME.textPrimary }}
-                  className="text-xl font-bold text-center mb-6"
+              <Text
+                style={{ color: THEME.textPrimary }}
+                className="text-xl font-bold text-center mb-6"
+              >
+                Enter Code
+              </Text>
+
+              <Text
+                style={{ color: THEME.textSecondary }}
+                className="mb-2 text-center"
+              >
+                Enter the 6-digit code sent to {email}
+              </Text>
+
+              <TextInput
+                value={otp}
+                onChangeText={setOtp}
+                placeholder="123456"
+                keyboardType="number-pad"
+                style={{
+                  backgroundColor: THEME.inputBackground,
+                  color: THEME.textPrimary,
+                  padding: 12,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: THEME.border,
+                  marginVertical: 12,
+                  fontSize: 18,
+                  textAlign: "center",
+                }}
+                placeholderTextColor={THEME.placeholderText}
+                maxLength={6}
+              />
+
+              <View className="mt-6">
+                <TouchableOpacity
+                  onPress={isSubmitting ? undefined : handleSubmit}
+                  activeOpacity={0.85}
+                  disabled={isSubmitting}
+                  style={{ opacity: isSubmitting ? 0.6 : 1 }}
                 >
-                  Enter Code
-                </Text>
-
-                <Text
-                  style={{ color: THEME.textSecondary }}
-                  className="mb-2 text-center"
-                >
-                  Enter the 6-digit code sent to {email}
-                </Text>
-
-                <TextInput
-                  value={otp}
-                  onChangeText={setOtp}
-                  placeholder="123456"
-                  keyboardType="number-pad"
-                  style={{
-                    backgroundColor: THEME.inputBackground,
-                    color: THEME.textPrimary,
-                    padding: 12,
-                    borderRadius: 8,
-                    borderWidth: 1,
-                    borderColor: THEME.border,
-                    marginVertical: 12,
-                    fontSize: 18,
-                    textAlign: "center",
-                  }}
-                  placeholderTextColor={THEME.placeholderText}
-                  maxLength={6}
-                />
-
-                <View className="mt-4">
-                  <TouchableOpacity
-                    onPress={isSubmitting ? undefined : handleSubmit}
-                    disabled={isSubmitting}
-                    activeOpacity={0.8}
-                    style={{ opacity: isSubmitting ? 0.6 : 1 }}
+                  <LinearGradient
+                    colors={[THEME.primary, THEME.secondary]}
+                    start={[0, 0]}
+                    end={[1, 1]}
+                    style={{
+                      paddingVertical: 12,
+                      borderRadius: 8,
+                      alignItems: "center",
+                    }}
                   >
-                    <View
-                      style={{
-                        backgroundColor: THEME.primary,
-                        padding: 12,
-                        borderRadius: 8,
-                        alignItems: "center",
-                        flexDirection: "row",
-                        justifyContent: "center",
-                      }}
-                    >
-                      {isSubmitting ? (
-                        <ActivityIndicator
-                          size="small"
-                          color={THEME.textPrimary}
-                        />
-                      ) : (
-                        <Text
-                          style={{
-                            color: THEME.textPrimary,
-                            fontWeight: "700",
-                          }}
-                        >
-                          Verify Code
-                        </Text>
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                </View>
+                    {isSubmitting ? (
+                      <ActivityIndicator
+                        size="small"
+                        color={THEME.textPrimary}
+                      />
+                    ) : (
+                      <Text
+                        style={{
+                          color: THEME.textPrimary,
+                          fontWeight: "700",
+                        }}
+                      >
+                        Send OTP
+                      </Text>
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
               </View>
             </View>
           </TouchableWithoutFeedback>

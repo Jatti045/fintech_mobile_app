@@ -525,10 +525,16 @@ export default function ProfileScreen() {
         <Modal
           visible={changeOpen}
           animationType="slide"
+          transparent={true}
           presentationStyle="pageSheet"
         >
           <SafeAreaView
-            style={{ flex: 1, backgroundColor: THEME.background, padding: 18 }}
+            style={{
+              flex: 1,
+              backgroundColor: THEME.background,
+              padding: 18,
+              position: "relative",
+            }}
           >
             {/* close button (top-right) will clear inputs via closeChangeModal */}
             <ModalCloseButton setOpenSheet={closeChangeModal} />
