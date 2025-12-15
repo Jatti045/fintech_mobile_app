@@ -68,33 +68,13 @@ app.use(cors());
 
 // Routes
 // Mount Arcjet middleware on /api to protect API endpoints (health remains public)
-//app.use("/api", arcjetMiddleware);
+app.use("/api", arcjetMiddleware);
 
 app.use("/api/transaction", transactionRouter);
 app.use("/api/user", userRouter);
 app.use("/api/budget", budgetRouter);
 
-// Health check endpoint (with database connectivity check)
-app.get("/health", async (req: Request, res: Response) => {
-  try {
-    // Check database connectivity
-    await prisma.$queryRaw`SELECT 1`;
-    res.status(200).json({
-      status: "ok",
-      database: "connected",
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    logger.error("Health check failed:", error);
-    res.status(503).json({
-      status: "error",
-      database: "disconnected",
-      timestamp: new Date().toISOString(),
-    });
-  }
-});
-
-// API health endpoint (for monitoring the API routes)
+// API health endpoint
 app.get("/api/health", async (req: Request, res: Response) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
