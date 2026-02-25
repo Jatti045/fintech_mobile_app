@@ -419,7 +419,8 @@ const transactionSlice = createSlice({
 
         // Optimistically update monthSummary when an EXPENSE is added
         if (created && (created.type ?? "EXPENSE").toUpperCase() === "EXPENSE") {
-          state.monthSummary.totalAmount += Number(created.amount || 0);
+          state.monthSummary.totalAmount =
+            Math.round((state.monthSummary.totalAmount + Number(created.amount || 0)) * 100) / 100;
         }
       })
       .addCase(createTransaction.rejected, (state, action) => {
@@ -442,7 +443,7 @@ const transactionSlice = createSlice({
           if (deletedTx && (deletedTx.type ?? "EXPENSE").toUpperCase() === "EXPENSE") {
             state.monthSummary.totalAmount = Math.max(
               0,
-              state.monthSummary.totalAmount - Number(deletedTx.amount || 0)
+              Math.round((state.monthSummary.totalAmount - Number(deletedTx.amount || 0)) * 100) / 100
             );
           }
           state.transactions = state.transactions.filter(
@@ -480,7 +481,7 @@ const transactionSlice = createSlice({
             if (oldAmt !== newAmt) {
               state.monthSummary.totalAmount = Math.max(
                 0,
-                state.monthSummary.totalAmount - oldAmt + newAmt
+                Math.round((state.monthSummary.totalAmount - oldAmt + newAmt) * 100) / 100
               );
             }
           }
