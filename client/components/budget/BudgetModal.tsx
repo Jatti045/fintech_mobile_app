@@ -1,6 +1,5 @@
 import React, { useEffect, useRef } from "react";
 import { useTheme } from "@/hooks/useRedux";
-import { useThemedAlert } from "@/utils/themedAlert";
 import { useBudgetOperations } from "@/hooks/budget/useBudgetOperation";
 import {
   Modal,
@@ -28,7 +27,6 @@ function BudgetModal({
   onClose?: () => void;
 }) {
   const { THEME } = useTheme();
-  const { showAlert } = useThemedAlert();
 
   const {
     budgetCategory: category,
