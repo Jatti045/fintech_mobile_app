@@ -25,6 +25,7 @@ import SearchTransaction from "@/components/transaction/searchTransaction";
 import AddNewTransactionButton from "@/components/transaction/addNewTransactionButton";
 import FilterTransaction from "@/components/transaction/filterTransaction";
 import { useTransactionOperations } from "@/hooks/transaction/useTransactionOperation";
+import { TransactionSkeleton } from "@/components/skeleton/SkeletonLoader";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -169,11 +170,7 @@ const TransactionRow = React.memo(function TransactionRow({
           style={{ backgroundColor: border, padding: 10 }}
           className="flex justify-center items-center rounded-full"
         >
-          <Feather
-            name={(tx.icon || "dollar-sign") as any}
-            size={24}
-            color={primary}
-          />
+          <Feather name={tx.icon as any} size={24} color={textSecondary} />
         </View>
         <View style={{ marginLeft: 12, flex: 1, minWidth: 0 }}>
           <Text
@@ -269,13 +266,16 @@ export default function TransactionScreen() {
   const { THEME } = useTheme();
   const calendar = useCalendar();
   const pagination = useTransactionPagination();
-  const { isAdding, isEditing, isDeleting, isLoadingMore } =
+  const { isAdding, isEditing, isDeleting, isLoadingMore, isLoading } =
     useTransactionStatus();
   const dispatch = useAppDispatch();
 
   // Only the delete handler is needed at screen level;
   // create + update are fully managed inside TransactionModal.
   const { handleDeleteTransaction } = useTransactionOperations();
+
+  /** Show skeleton while initial data is loading (transactions empty + loading) */
+  const isInitialLoading = isLoading && transactions.length === 0;
 
   // ── Screen-level state ────────────────────────────────────────────────
   const [openSheet, setOpenSheet] = useState(false);
@@ -528,6 +528,19 @@ export default function TransactionScreen() {
   );
 
   // ── Render ────────────────────────────────────────────────────────────
+
+  // Show skeleton loader during initial data fetch
+  if (isInitialLoading) {
+    return (
+      <SafeAreaView
+        edges={["left", "right"]}
+        style={{ backgroundColor: THEME.background, flex: 1 }}
+        className="px-4"
+      >
+        <TransactionSkeleton THEME={THEME} />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView

@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from "react";
 import { ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useBudgets, useTheme } from "@/hooks/useRedux";
+import { useBudgets, useTheme, useBudgetStatus } from "@/hooks/useRedux";
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { capitalizeFirst, formatCurrency } from "@/utils/helper";
@@ -9,6 +9,7 @@ import MaskedView from "@react-native-masked-view/masked-view";
 import BudgetModal from "@/components/budget/BudgetModal";
 import { useBudgetOperations } from "@/hooks/budget/useBudgetOperation";
 import { IBudget } from "@/store/slices/budgetSlice";
+import { BudgetSkeleton } from "@/components/skeleton/SkeletonLoader";
 
 /**
  * Safely coerces a possibly-string or undefined value to a finite number.
@@ -298,10 +299,14 @@ export default function BudgetScreen() {
   // ── Redux selectors ─────────────────────────────────────────────────────
   const budgets = useBudgets();
   const { THEME } = useTheme();
+  const { isLoading } = useBudgetStatus();
 
   // Only the delete handler is needed at screen level;
   // create + update are fully managed inside BudgetModal.
   const { handleDeleteBudget } = useBudgetOperations();
+
+  /** Show skeleton while initial data is loading (budgets empty + loading) */
+  const isInitialLoading = isLoading && budgets.length === 0;
 
   // ── Screen-level state ────────────────────────────────────────────────
   const [openSheet, setOpenSheet] = useState(false);
@@ -329,6 +334,19 @@ export default function BudgetScreen() {
   // ── Render ────────────────────────────────────────────────────────────
 
   const hasBudgets = budgets && budgets.length > 0;
+
+  // Show skeleton loader during initial data fetch
+  if (isInitialLoading) {
+    return (
+      <SafeAreaView
+        edges={["left", "right"]}
+        className="flex-1"
+        style={{ backgroundColor: THEME.background }}
+      >
+        <BudgetSkeleton THEME={THEME} />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView

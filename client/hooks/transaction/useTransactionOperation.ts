@@ -5,6 +5,7 @@ import {
   updateTransaction,
   deleteTransaction,
 } from "@/store/slices/transactionSlice";
+import { fetchBudgets } from "@/store/slices/budgetSlice";
 import { TransactionType } from "@/api/transaction";
 import { formatCurrency } from "@/utils/helper";
 import { useThemedAlert } from "@/utils/themedAlert";
@@ -181,6 +182,13 @@ export const useTransactionOperations = () => {
               currentYear: calendar.year,
               useCache: false,
             } as any),
+          );
+          // Refresh budgets so the spent amount reflects the updated transaction
+          dispatch(
+            fetchBudgets({
+              currentMonth: calendar.month,
+              currentYear: calendar.year,
+            }),
           );
           return;
         }

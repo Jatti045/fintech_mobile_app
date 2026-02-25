@@ -69,7 +69,6 @@ function BudgetModal({
     <Modal
       visible={openSheet}
       animationType="slide"
-      transparent={true}
       presentationStyle="pageSheet"
     >
       <SafeAreaView

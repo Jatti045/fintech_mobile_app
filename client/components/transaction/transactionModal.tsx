@@ -114,7 +114,6 @@ function TransactionModal({
     <Modal
       visible={openSheet}
       animationType="slide"
-      transparent={true}
       presentationStyle="pageSheet"
     >
       <SafeAreaView

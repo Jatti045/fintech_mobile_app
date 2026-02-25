@@ -119,7 +119,7 @@ const coffee = {
 
   // Feedback colors (softer but still distinct)
   success: "#A5D6A7", // Pastel green
-  danger: "#C62828", // Muted rose red
+  danger: "#FF6F6F", // Muted rose red
   warning: "#FFCC80", // Light warm orange
 
   // UI elements
@@ -183,7 +183,7 @@ export const loadThemeFromStorage = createAsyncThunk(
       console.error("Failed to load theme from storage:", error);
       return rejectWithValue("Failed to load theme");
     }
-  }
+  },
 );
 
 const themeSlice = createSlice({
