@@ -1,4 +1,4 @@
-import { useAppDispatch, useTheme } from "@/hooks/useRedux";
+import { useTheme } from "@/hooks/useRedux";
 import { useThemedAlert } from "@/utils/themedAlert";
 import { Feather, FontAwesome, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -18,52 +18,40 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { useState, useEffect, useRef } from "react";
 import ModalCloseButton from "../modalCloseButton";
 import { IBudget } from "@/store/slices/budgetSlice";
+import { capitalizeFirst } from "@/utils/helper";
+import { useTransactionOperations } from "@/hooks/transaction/useTransactionOperation";
 
 function TransactionModal({
   openSheet,
   setOpenSheet,
-  name,
-  setName,
-  amount,
-  setAmount,
-  selectedCategoryAndId,
-  setSelectedCategoryAndId,
-  date,
-  setDate,
-  monthStartDate,
-  monthEndDate,
   budgets,
-  handleCreateTransaction,
-  capitalizeFirst,
   editingTransaction,
-  handleUpdateTransaction,
-  isSaving,
   onClose,
 }: {
   openSheet: boolean;
   setOpenSheet: (val: boolean) => void;
-  name: string;
-  setName: (val: string) => void;
-  amount: string;
-  setAmount: (val: string) => void;
-  selectedCategoryAndId: { id: string; name: string };
-  setSelectedCategoryAndId: (val: { id: string; name: string }) => void;
-  date: Date;
-  setDate: (val: Date) => void;
-  monthStartDate: Date;
-  monthEndDate: Date;
+  editingTransaction?: any;
   budgets: IBudget[];
-  handleCreateTransaction: () => void;
-  capitalizeFirst: (str: string) => string;
-  editingTransaction?: any | null;
-  handleUpdateTransaction?: (id: string, updates: any) => Promise<void> | any;
-  isSaving?: boolean;
   onClose?: () => void;
 }) {
   const { THEME } = useTheme();
   const { showAlert } = useThemedAlert();
   const [showPicker, setShowPicker] = useState(false);
-  const dispatch = useAppDispatch();
+
+  const {
+    txName,
+    setTxName,
+    txAmount,
+    setTxAmount,
+    txDate,
+    setTxDate,
+    txSelectedCategoryAndId,
+    setTxSelectedCategoryAndId,
+    monthStartDate,
+    monthEndDate,
+    handleCreateTransaction,
+    handleUpdateTransaction,
+  } = useTransactionOperations();
 
   // Track openSheet transitions so we can clear form on close
   const prevOpenRef = useRef(openSheet);
@@ -71,10 +59,10 @@ function TransactionModal({
     if (!openSheet && prevOpenRef.current) {
       // Modal transitioned from open -> closed: clear form fields
       try {
-        setName("");
-        setAmount("");
-        setSelectedCategoryAndId({ id: "", name: "" });
-        setDate(new Date());
+        setTxName("");
+        setTxAmount("");
+        setTxSelectedCategoryAndId({ id: "", name: "" });
+        setTxDate(new Date());
       } catch (e) {
         // ignore
       }
@@ -87,14 +75,14 @@ function TransactionModal({
   useEffect(() => {
     if (editingTransaction) {
       try {
-        setName(editingTransaction.name || "");
-        setAmount(String(editingTransaction.amount ?? ""));
-        setDate(
+        setTxName(editingTransaction.name || "");
+        setTxAmount(String(editingTransaction.amount ?? ""));
+        setTxDate(
           editingTransaction.date
             ? new Date(editingTransaction.date)
-            : new Date()
+            : new Date(),
         );
-        setSelectedCategoryAndId({
+        setTxSelectedCategoryAndId({
           id: editingTransaction.budgetId || "",
           name: editingTransaction.category || "",
         });
@@ -121,7 +109,6 @@ function TransactionModal({
       return d.toDateString();
     }
   };
-  console.log("budget: ", budgets);
 
   return (
     <Modal
@@ -161,8 +148,8 @@ function TransactionModal({
                 </Text>
                 <TextInput
                   placeholder="e.g., Coffee at Joe's, Grocery shopping"
-                  value={name}
-                  onChangeText={setName}
+                  value={txName}
+                  onChangeText={setTxName}
                   placeholderTextColor={THEME.placeholderText}
                   accessibilityLabel="Transaction name"
                   className="py-3"
@@ -189,8 +176,8 @@ function TransactionModal({
                 </Text>
                 <TextInput
                   placeholder="e.g., 4.50 or 120.00"
-                  value={amount}
-                  onChangeText={setAmount}
+                  value={txAmount}
+                  onChangeText={setTxAmount}
                   keyboardType="numeric"
                   placeholderTextColor={THEME.placeholderText}
                   accessibilityLabel="Transaction amount"
@@ -226,13 +213,13 @@ function TransactionModal({
                       borderColor: THEME.border,
                     }}
                     onPress={() =>
-                      setSelectedCategoryAndId({
+                      setTxSelectedCategoryAndId({
                         id: budget.id,
                         name: budget.category,
                       })
                     }
                     className={`py-3 px-4 mb-2 flex-row items-center gap-4 rounded-lg border ${
-                      selectedCategoryAndId.id === budget.id
+                      txSelectedCategoryAndId.id === budget.id
                         ? "border-4 py-4"
                         : "border-1"
                     }`}
@@ -278,9 +265,9 @@ function TransactionModal({
                         activeOpacity={0.7}
                         accessibilityLabel="Previous day"
                         onPress={() => {
-                          const prev = new Date(date);
+                          const prev = new Date(txDate);
                           prev.setDate(prev.getDate() - 1);
-                          setDate(clampDate(prev));
+                          setTxDate(clampDate(prev));
                         }}
                         style={{ padding: 6 }}
                       >
@@ -299,7 +286,7 @@ function TransactionModal({
                         className="py-2 px-3"
                       >
                         <Text style={{ color: THEME.textPrimary }}>
-                          {formatShortDate(date)}
+                          {formatShortDate(txDate)}
                         </Text>
                       </TouchableOpacity>
 
@@ -307,9 +294,9 @@ function TransactionModal({
                         accessibilityLabel="Next day"
                         activeOpacity={0.7}
                         onPress={() => {
-                          const next = new Date(date);
+                          const next = new Date(txDate);
                           next.setDate(next.getDate() + 1);
-                          setDate(clampDate(next));
+                          setTxDate(clampDate(next));
                         }}
                         style={{ padding: 6 }}
                       >
@@ -342,14 +329,14 @@ function TransactionModal({
                   <DateTimePicker
                     minimumDate={monthStartDate}
                     maximumDate={monthEndDate}
-                    value={date}
+                    value={txDate}
                     mode="date"
                     textColor={THEME.textPrimary}
                     display={Platform.OS === "ios" ? "spinner" : "calendar"}
                     onChange={(event: any, selectedDate?: Date | undefined) => {
                       // On Android the event.type can be 'dismissed' — only set when a date provided
                       if (selectedDate) {
-                        setDate(clampDate(selectedDate));
+                        setTxDate(clampDate(selectedDate));
                       }
                       // Close the picker on Android after selection
                       if (Platform.OS !== "ios") setShowPicker(false);
@@ -370,25 +357,19 @@ function TransactionModal({
                   onPress={async () => {
                     // Basic front-end validation
                     if (
-                      !name ||
-                      amount === "" ||
-                      !selectedCategoryAndId?.name
+                      !txName ||
+                      txAmount === "" ||
+                      !txSelectedCategoryAndId?.name
                     ) {
                       showAlert({ title: "Please fill all fields" });
                       return;
                     }
 
                     // If editing, call update handler, otherwise create
-                    if (editingTransaction && handleUpdateTransaction) {
-                      // detect no-op: compare values
-                      handleUpdateTransaction(editingTransaction.id, {
-                        name,
-                        amount: parseFloat(amount),
-                        budgetId: selectedCategoryAndId.id,
-                        date: date.toISOString(),
-                      });
+                    if (editingTransaction) {
+                      handleUpdateTransaction(editingTransaction, setOpenSheet);
                     } else {
-                      handleCreateTransaction();
+                      handleCreateTransaction(setOpenSheet);
                     }
                   }}
                 >

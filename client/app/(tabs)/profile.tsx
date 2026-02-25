@@ -45,19 +45,6 @@ export default function ProfileScreen() {
     }
   }, [error]);
 
-  const bankConnections = [
-    {
-      name: "Bank of America",
-      accountNumber: "4567",
-      balance: "$5,230.50",
-    },
-    {
-      name: "Chase",
-      accountNumber: "8910",
-      balance: "$12,780.12",
-    },
-  ];
-
   const settingsItems = [
     {
       title: "Log Out",
@@ -123,7 +110,7 @@ export default function ProfileScreen() {
       try {
         setUploading(true);
         const resultAction = await dispatch(
-          uploadProfilePicture({ userId: user.id, imageFile })
+          uploadProfilePicture({ userId: user.id, imageFile }),
         );
 
         if (uploadProfilePicture.fulfilled.match(resultAction)) {
@@ -193,7 +180,7 @@ export default function ProfileScreen() {
                     onPress: async () => {
                       if (user?.id) {
                         const response = await dispatch(
-                          deleteUserAccount(user.id)
+                          deleteUserAccount(user.id),
                         );
 
                         const { success, message } = response.payload as {
@@ -231,6 +218,48 @@ export default function ProfileScreen() {
     showAlert({
       title: "Theme Changed",
       message: `Theme changed to ${themeName}`,
+    });
+  };
+
+  const handleDeleteImage = async () => {
+    showAlert({
+      title: "Delete Profile Picture",
+      message: "Are you sure you want to delete your profile picture?",
+      buttons: [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            if (!user?.id) return;
+            try {
+              setDeleting(true);
+              const res: any = await dispatch(deleteProfilePicture(user.id));
+
+              if (deleteProfilePicture.fulfilled.match(res)) {
+                showAlert({
+                  title: "Deleted",
+                  message: "Profile picture deleted.",
+                });
+              } else {
+                showAlert({
+                  title: "Deletion Failed",
+                  message:
+                    (res.payload as string) ||
+                    "Failed to delete profile picture",
+                });
+              }
+            } catch (e: any) {
+              showAlert({
+                title: "Deletion Failed",
+                message: e?.message || "Failed to delete profile picture",
+              });
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ],
     });
   };
 
@@ -282,51 +311,7 @@ export default function ProfileScreen() {
                 {user?.profilePic ? (
                   <TouchableOpacity
                     onPress={handlePickImage}
-                    onLongPress={() => {
-                      showAlert({
-                        title: "Delete Profile Picture",
-                        message:
-                          "Are you sure you want to delete your profile picture?",
-                        buttons: [
-                          { text: "Cancel", style: "cancel" },
-                          {
-                            text: "Delete",
-                            style: "destructive",
-                            onPress: async () => {
-                              if (!user?.id) return;
-                              try {
-                                setDeleting(true);
-                                const res: any = await dispatch(
-                                  deleteProfilePicture(user.id)
-                                );
-                                if (deleteProfilePicture.fulfilled.match(res)) {
-                                  showAlert({
-                                    title: "Deleted",
-                                    message: "Profile picture deleted.",
-                                  });
-                                } else {
-                                  showAlert({
-                                    title: "Deletion Failed",
-                                    message:
-                                      (res.payload as string) ||
-                                      "Failed to delete profile picture",
-                                  });
-                                }
-                              } catch (e: any) {
-                                showAlert({
-                                  title: "Deletion Failed",
-                                  message:
-                                    e?.message ||
-                                    "Failed to delete profile picture",
-                                });
-                              } finally {
-                                setDeleting(false);
-                              }
-                            },
-                          },
-                        ],
-                      });
-                    }}
+                    onLongPress={handleDeleteImage}
                   >
                     <Image
                       source={{ uri: user.profilePic }}
@@ -636,7 +621,7 @@ export default function ProfileScreen() {
                           currentPassword,
                           newPassword,
                           confirmPassword,
-                        })
+                        }),
                       );
                       if (changePassword.fulfilled.match(response)) {
                         showAlert({

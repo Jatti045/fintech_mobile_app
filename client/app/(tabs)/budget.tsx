@@ -1,238 +1,334 @@
-import React, { useEffect } from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  Modal,
-  TextInput,
-  Touchable,
-} from "react-native";
+import React, { useCallback, useState } from "react";
+import { ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import {
-  useAppDispatch,
-  useBudgets,
-  useTheme,
-  useTransactions,
-  useCalendar,
-} from "@/hooks/useRedux";
-import {
-  createBudget,
-  deleteBudget,
-  updateBudget,
-} from "@/store/slices/budgetSlice";
+import { useBudgets, useTheme } from "@/hooks/useRedux";
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { capitalizeFirst, formatDate } from "@/utils/helper";
+import { capitalizeFirst, formatCurrency } from "@/utils/helper";
 import MaskedView from "@react-native-masked-view/masked-view";
 import BudgetModal from "@/components/budget/BudgetModal";
-import { useThemedAlert } from "@/utils/themedAlert";
+import { useBudgetOperations } from "@/hooks/budget/useBudgetOperation";
+import { IBudget } from "@/store/slices/budgetSlice";
 
-export default function Goals() {
-  const dispatch = useAppDispatch();
+/**
+ * Safely coerces a possibly-string or undefined value to a finite number.
+ * Returns `0` for NaN / Infinity / undefined / null — never throws.
+ */
+function safeAmount(raw: number | string | undefined | null): number {
+  const n = typeof raw === "string" ? parseFloat(raw) : Number(raw ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Computes the overspend delta using **integer-cent math** to prevent
+ * floating-point drift (e.g. `150.10 - 100.20` → `49.90`, not `49.900000…01`).
+ *
+ * @returns The absolute difference in dollars, safe for display.
+ */
+function overspendDeltaCents(
+  limitRaw: number | string,
+  spentRaw: number | string,
+): number {
+  const limitCents = Math.round(safeAmount(limitRaw) * 100);
+  const spentCents = Math.round(safeAmount(spentRaw) * 100);
+  return Math.abs(limitCents - spentCents) / 100;
+}
+
+// ─── Memoised sub-components ────────────────────────────────────────────────
+
+/** Props for a single budget card. */
+interface BudgetCardProps {
+  budget: IBudget;
+  onEdit: (budget: IBudget) => void;
+  onDelete: (id: string) => void;
+  surface: string;
+  border: string;
+  background: string;
+  primary: string;
+  secondary: string;
+  textPrimary: string;
+  textSecondary: string;
+  danger: string;
+}
+
+/**
+ * A single budget card with icon, progress bar, overspend badge, and warning text.
+ *
+ * Financial calculations (ratio, percent, overspend) use integer-cent math
+ * to avoid floating-point drift. Wrapped in `React.memo` so it only
+ * re-renders when its own props change.
+ */
+const BudgetCard = React.memo(function BudgetCard({
+  budget,
+  onEdit,
+  onDelete,
+  surface,
+  border,
+  background,
+  primary,
+  secondary,
+  textPrimary,
+  textSecondary,
+  danger,
+}: BudgetCardProps) {
+  const limit = safeAmount(budget.limit);
+  const spent = safeAmount(budget.spent);
+
+  /** Spend ratio clamped to [0, 1] for the progress bar width. */
+  const ratio = limit > 0 ? Math.max(0, Math.min(1, spent / limit)) : 0;
+
+  /** Integer percentage for display (avoids "33.33333…%"). */
+  const percent = Math.round(ratio * 100);
+
+  /** Whether spending has exceeded the budget limit. */
+  const overspent = spent > limit && limit > 0;
+
+  return (
+    <TouchableOpacity
+      activeOpacity={0.9}
+      onPress={() => onEdit(budget)}
+      onLongPress={() => onDelete(budget.id)}
+    >
+      <View
+        style={{
+          backgroundColor: surface,
+          borderColor: border,
+          borderWidth: 1,
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: 0.06,
+          shadowRadius: 12,
+          elevation: 6,
+        }}
+        className="p-4 mb-4 rounded-2xl"
+      >
+        {/* Top row: category / limit / spent + icon / percent */}
+        <View className="flex-row justify-between items-start">
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: textSecondary }} className="text-sm">
+              {capitalizeFirst(budget.category)}
+            </Text>
+            <Text
+              style={{ color: textPrimary }}
+              className="text-2xl font-extrabold mt-1"
+            >
+              {formatCurrency(limit)}
+            </Text>
+            <View className="flex-row items-center mt-2">
+              <Text
+                style={{ color: overspent ? danger : textSecondary }}
+                className="text-sm"
+              >
+                Spent {formatCurrency(spent)}
+              </Text>
+              {overspent && (
+                <View
+                  className="ml-3 px-2 py-1 rounded-full"
+                  style={{ backgroundColor: danger }}
+                >
+                  <Text
+                    style={{ color: textPrimary }}
+                    className="text-xs font-bold"
+                  >
+                    Over
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
+
+          <View className="items-center ml-4">
+            <Feather
+              name={budget.icon as keyof typeof Feather.glyphMap}
+              size={64}
+              color={secondary}
+            />
+            <View
+              className="mt-2 px-2 py-1 rounded-md"
+              style={{
+                backgroundColor: overspent ? "#FFF6F6" : background,
+              }}
+            >
+              <Text
+                style={{ color: overspent ? danger : textSecondary }}
+                className="font-bold"
+              >
+                {percent}%
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Progress bar */}
+        <View
+          className="mt-4 rounded-full overflow-hidden"
+          style={{ backgroundColor: border, height: 12 }}
+        >
+          <View style={{ flexDirection: "row", width: "100%", height: 12 }}>
+            <LinearGradient
+              colors={overspent ? [danger, danger] : [primary, secondary]}
+              start={[0, 0]}
+              end={[1, 0]}
+              style={{ flex: ratio }}
+            />
+            <View style={{ flex: 1 - ratio }} />
+          </View>
+        </View>
+
+        {/* Warning text when overspent */}
+        {overspent && (
+          <View className="mt-3 flex-row items-center">
+            <Feather name="alert-circle" size={18} color={danger} />
+            <Text className="ml-2" style={{ color: danger }}>
+              You have exceeded this budget by{" "}
+              {formatCurrency(overspendDeltaCents(limit, spent))}
+            </Text>
+          </View>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+});
+
+/**
+ * Gradient-masked empty-state message shown when no budgets exist
+ * for the selected month. Wrapped in `React.memo` — the colours rarely change.
+ */
+const EmptyBudgetState = React.memo(function EmptyBudgetState({
+  primary,
+  secondary,
+  textPrimary,
+  textSecondary,
+}: {
+  primary: string;
+  secondary: string;
+  textPrimary: string;
+  textSecondary: string;
+}) {
+  return (
+    <View className="flex-1 justify-center items-center px-6 pt-12">
+      <MaskedView
+        maskElement={
+          <Text
+            className="text-3xl font-extrabold text-center"
+            style={{ color: textPrimary }}
+          >
+            No budgets for this month
+          </Text>
+        }
+      >
+        <LinearGradient
+          colors={[primary, secondary]}
+          start={[0, 0]}
+          end={[1, 1]}
+        >
+          {/* Text is invisible but used to size the mask */}
+          <Text
+            className="text-3xl font-extrabold text-center"
+            style={{ opacity: 0 }}
+          >
+            No budgets for this month
+          </Text>
+        </LinearGradient>
+      </MaskedView>
+
+      <Text
+        className="text-center mt-4 text-base"
+        style={{ color: textSecondary }}
+      >
+        Create budgets to track spending by category for the selected month. Tap
+        "New Budget" to get started.
+      </Text>
+    </View>
+  );
+});
+
+/**
+ * Floating action button to create a new budget.
+ * Wrapped in `React.memo` so it doesn't re-render on parent state changes.
+ */
+const NewBudgetButton = React.memo(function NewBudgetButton({
+  onPress,
+  primary,
+  secondary,
+  textPrimary,
+}: {
+  onPress: () => void;
+  primary: string;
+  secondary: string;
+  textPrimary: string;
+}) {
+  return (
+    <View className="absolute bottom-0 right-0 p-4">
+      <TouchableOpacity onPress={onPress}>
+        <LinearGradient
+          colors={[primary, secondary]}
+          start={[0, 0]}
+          end={[1, 1]}
+          style={{
+            paddingVertical: 12,
+            paddingHorizontal: 12,
+            alignItems: "center",
+            justifyContent: "center",
+            borderRadius: 1000,
+            shadowColor: primary,
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.7,
+            shadowRadius: 16,
+            elevation: 16,
+          }}
+        >
+          <View className="items-center justify-center flex-row gap-1">
+            <Feather name="plus" size={24} color={textPrimary} />
+            <Text
+              style={{ color: textPrimary }}
+              className="font-bold text-base"
+            >
+              New Budget
+            </Text>
+          </View>
+        </LinearGradient>
+      </TouchableOpacity>
+    </View>
+  );
+});
+
+// ─── Main Screen Component ──────────────────────────────────────────────────
+
+export default function BudgetScreen() {
+  // ── Redux selectors ─────────────────────────────────────────────────────
   const budgets = useBudgets();
-  const transactions = useTransactions();
   const { THEME } = useTheme();
-  const calendar = useCalendar();
-  const { showAlert } = useThemedAlert();
 
-  const [openSheet, setOpenSheet] = React.useState(false);
-  const [category, setCategory] = React.useState("");
-  const [icon, setIcon] = React.useState("");
-  const [limit, setLimit] = React.useState("");
-  const [saving, setSaving] = React.useState(false);
-  const [editingBudget, setEditingBudget] = React.useState<any | null>(null);
+  // Only the delete handler is needed at screen level;
+  // create + update are fully managed inside BudgetModal.
+  const { handleDeleteBudget } = useBudgetOperations();
 
-  const handleCreateBudget = async () => {
-    // validation
-    if (!category.trim() || !limit.trim() || !icon.trim()) {
-      showAlert({
-        title: "Missing Information",
-        message: "Please enter category, icon, and limit",
-      });
-      return;
-    }
+  // ── Screen-level state ────────────────────────────────────────────────
+  const [openSheet, setOpenSheet] = useState(false);
+  const [editingBudget, setEditingBudget] = useState<IBudget | null>(null);
 
-    const parsedCategory = capitalizeFirst(category.trim());
+  // ── Stable callbacks ──────────────────────────────────────────────────
 
-    const parsedLimit = Number(limit);
-    if (isNaN(parsedLimit) || parsedLimit <= 0) {
-      showAlert({
-        title: "Invalid Amount",
-        message: "Please enter a valid numeric limit",
-      });
-      return;
-    }
-    const currentMonth = calendar.month;
-    const currentYear = calendar.year;
-    setSaving(true);
-    try {
-      const response = await dispatch(
-        createBudget({
-          category: parsedCategory,
-          icon: icon,
-          limit: parsedLimit,
-          month: currentMonth,
-          year: currentYear,
-        })
-      );
+  /** Open the modal in edit mode for the given budget. */
+  const handleEditPress = useCallback((budget: IBudget) => {
+    setEditingBudget(budget);
+    setOpenSheet(true);
+  }, []);
 
-      const { success, message } = response.payload as {
-        success: boolean;
-        message: string;
-      };
-
-      if (!success) {
-        showAlert({ title: "Error", message: message || "Failed to save" });
-        return;
-      }
-      showAlert({ title: "Success", message: "Budget created successfully" });
-    } catch (err: any) {
-      showAlert({ title: "Error", message: err.message || "Failed to save" });
-    } finally {
-      setSaving(false);
-      setOpenSheet(false);
-      setCategory("");
-      setLimit("");
-    }
-  };
-
-  const resetForm = () => {
-    setCategory("");
-    setLimit("");
+  /** Clear editing state when the modal closes. */
+  const handleModalClose = useCallback(() => {
+    setOpenSheet(false);
     setEditingBudget(null);
-  };
+  }, []);
 
-  const handleUpdateBudget = async (id: string, updates: any) => {
-    setSaving(true);
-    try {
-      const response = await dispatch(updateBudget({ id, updates }));
-      const { success, message } = response.payload as {
-        success: boolean;
-        message: string;
-      };
-      if (!success) {
-        showAlert({
-          title: "Error",
-          message: message || "Failed to update budget",
-        });
-        return;
-      }
-      showAlert({ title: "Success", message: "Budget updated successfully" });
-      setOpenSheet(false);
-      resetForm();
-    } catch (err: any) {
-      showAlert({
-        title: "Error",
-        message: err?.message || "Failed to update budget",
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
+  /** Open the modal in create mode. */
+  const handleNewBudget = useCallback(() => {
+    setOpenSheet(true);
+  }, []);
 
-  const handleDeleteBudget = (budgetId: string) => {
-    // Client-side pre-check using local transactions cache
-    try {
-      const attached = transactions.filter((t: any) => t.budgetId === budgetId);
-      const attachedCount = attached.length;
-      if (attachedCount > 0) {
-        showAlert({
-          title: "Cannot delete budget",
-          message: `This budget has ${attachedCount} transaction${attachedCount > 1 ? "s" : ""} attached. Remove or reassign those transactions first.`,
-        });
-        return;
-      }
+  // ── Render ────────────────────────────────────────────────────────────
 
-      // proceed with confirmation if no attached transactions
-      showAlert({
-        title: "Delete Budget",
-        message: "Are you sure you want to delete this budget?",
-        buttons: [
-          {
-            text: "Cancel",
-            style: "cancel",
-          },
-          {
-            text: "Delete",
-            style: "destructive",
-            onPress: async () => {
-              try {
-                const response = await dispatch(deleteBudget(budgetId));
-                const { success, message } = response.payload as {
-                  success: boolean;
-                  message: string;
-                };
-                if (success) {
-                  showAlert({
-                    title: "Success",
-                    message: "Budget deleted successfully",
-                  });
-                  return;
-                }
-                showAlert({
-                  title: "Error",
-                  message: message || "Failed to delete budget",
-                });
-              } catch (err: any) {
-                showAlert({
-                  title: "Error",
-                  message: err.message || "Failed to delete budget",
-                });
-              }
-            },
-          },
-        ],
-      });
-    } catch (e: any) {
-      // fallback to previous delete flow in case of an unexpected error
-      showAlert({
-        title: "Delete Budget",
-        message: "Are you sure you want to delete this budget?",
-        buttons: [
-          {
-            text: "Cancel",
-            style: "cancel",
-          },
-          {
-            text: "Delete",
-            style: "destructive",
-            onPress: async () => {
-              try {
-                const response = await dispatch(deleteBudget(budgetId));
-                const { success, message } = response.payload as {
-                  success: boolean;
-                  message: string;
-                };
-                if (success) {
-                  setTimeout(() => {
-                    showAlert({
-                      title: "Success",
-                      message: "Budget deleted successfully",
-                    });
-                  }, 400);
-                  return;
-                }
-                setTimeout(() => {
-                  showAlert({
-                    title: "Error",
-                    message: message || "Failed to delete budget",
-                  });
-                }, 400);
-              } catch (err: any) {
-                setTimeout(() => {
-                  showAlert({
-                    title: "Error",
-                    message: err.message || "Failed to delete budget",
-                  });
-                }, 400);
-              }
-            },
-          },
-        ],
-      });
-    }
-  };
+  const hasBudgets = budgets && budgets.length > 0;
 
   return (
     <SafeAreaView
@@ -251,248 +347,51 @@ export default function Goals() {
               Budgets
             </Text>
           </View>
-          {budgets && budgets.length > 0 ? (
-            budgets.map((budget) => {
-              const limit = Number(budget.limit) || 0;
-              const spent = Number(budget.spent) || 0;
-              const rawRatio = limit > 0 ? spent / limit : 0;
-              const ratio = Math.max(0, Math.min(1, rawRatio));
-              const percent = Math.round(ratio * 100);
-              const overspent = spent > limit && limit > 0;
 
-              return (
-                <TouchableOpacity
-                  key={budget.id}
-                  activeOpacity={0.9}
-                  onPress={() => {
-                    setEditingBudget(budget);
-                    setCategory(String(budget.category ?? ""));
-                    setIcon(String(budget.icon ?? ""));
-                    setLimit(String(budget.limit ?? ""));
-                    setOpenSheet(true);
-                  }}
-                  onLongPress={() => handleDeleteBudget(budget.id)}
-                >
-                  <View
-                    style={{
-                      backgroundColor: THEME.surface,
-                      borderColor: THEME.border,
-                      borderWidth: 1,
-                      shadowOffset: { width: 0, height: 6 },
-                      shadowOpacity: 0.06,
-                      shadowRadius: 12,
-                      elevation: 6,
-                    }}
-                    className="p-4 mb-4 rounded-2xl"
-                  >
-                    <View className="flex-row justify-between items-start">
-                      <View style={{ flex: 1 }}>
-                        <Text
-                          style={{ color: THEME.textSecondary }}
-                          className="text-sm"
-                        >
-                          {capitalizeFirst(budget.category)}
-                        </Text>
-                        <Text
-                          style={{ color: THEME.textPrimary }}
-                          className="text-2xl font-extrabold mt-1"
-                        >
-                          ${limit.toFixed(2)}
-                        </Text>
-                        <View className="flex-row items-center mt-2">
-                          <Text
-                            style={{
-                              color: overspent
-                                ? THEME.danger
-                                : THEME.textSecondary,
-                            }}
-                            className="text-sm"
-                          >
-                            Spent ${spent.toFixed(2)}
-                          </Text>
-                          {overspent && (
-                            <View
-                              className="ml-3 px-2 py-1 rounded-full"
-                              style={{ backgroundColor: THEME.danger }}
-                            >
-                              <Text
-                                style={{ color: THEME.textPrimary }}
-                                className="text-xs font-bold"
-                              >
-                                Over
-                              </Text>
-                            </View>
-                          )}
-                        </View>
-                      </View>
-
-                      <View className="items-center ml-4">
-                        <Feather
-                          name={budget.icon as keyof typeof Feather.glyphMap}
-                          size={64}
-                          color={THEME.secondary}
-                        />
-                        <View
-                          className="mt-2 px-2 py-1 rounded-md"
-                          style={{
-                            backgroundColor: overspent
-                              ? "#FFF6F6"
-                              : THEME.background,
-                          }}
-                        >
-                          <Text
-                            style={{
-                              color: overspent
-                                ? THEME.danger
-                                : THEME.textSecondary,
-                            }}
-                            className="font-bold"
-                          >
-                            {percent}%
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-
-                    {/* Progress bar */}
-                    <View
-                      className="mt-4 rounded-full overflow-hidden"
-                      style={{ backgroundColor: THEME.border, height: 12 }}
-                    >
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          width: "100%",
-                          height: 12,
-                        }}
-                      >
-                        <LinearGradient
-                          colors={
-                            overspent
-                              ? [THEME.danger, THEME.danger]
-                              : [THEME.primary, THEME.secondary]
-                          }
-                          start={[0, 0]}
-                          end={[1, 0]}
-                          style={{ flex: ratio }}
-                        />
-                        <View style={{ flex: 1 - ratio }} />
-                      </View>
-                    </View>
-
-                    {/* Warning text when overspent */}
-                    {overspent && (
-                      <View className="mt-3 flex-row items-center">
-                        <Feather
-                          name="alert-circle"
-                          size={18}
-                          color={THEME.danger}
-                        />
-                        <Text className="ml-2" style={{ color: THEME.danger }}>
-                          You have exceeded this budget by $
-                          {Math.abs(limit - spent).toFixed(2)}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                </TouchableOpacity>
-              );
-            })
+          {/* Budget cards or empty state */}
+          {hasBudgets ? (
+            budgets.map((budget) => (
+              <BudgetCard
+                key={budget.id}
+                budget={budget}
+                onEdit={handleEditPress}
+                onDelete={handleDeleteBudget}
+                surface={THEME.surface}
+                border={THEME.border}
+                background={THEME.background}
+                primary={THEME.primary}
+                secondary={THEME.secondary}
+                textPrimary={THEME.textPrimary}
+                textSecondary={THEME.textSecondary}
+                danger={THEME.danger}
+              />
+            ))
           ) : (
-            <View className="flex-1 justify-center items-center px-6 pt-12">
-              <MaskedView
-                maskElement={
-                  <Text
-                    className="text-3xl font-extrabold text-center"
-                    style={{ color: THEME.textPrimary }}
-                  >
-                    No budgets for this month
-                  </Text>
-                }
-              >
-                <LinearGradient
-                  colors={[THEME.primary, THEME.secondary]}
-                  start={[0, 0]}
-                  end={[1, 1]}
-                >
-                  {/* Text is invisible but used to size the mask */}
-                  <Text
-                    className="text-3xl font-extrabold text-center"
-                    style={{ opacity: 0 }}
-                  >
-                    No budgets for this month
-                  </Text>
-                </LinearGradient>
-              </MaskedView>
-
-              <Text
-                className="text-center mt-4 text-base"
-                style={{ color: THEME.textSecondary }}
-              >
-                Create budgets to track spending by category for the selected
-                month. Tap "New Budget" to get started.
-              </Text>
-            </View>
+            <EmptyBudgetState
+              primary={THEME.primary}
+              secondary={THEME.secondary}
+              textPrimary={THEME.textPrimary}
+              textSecondary={THEME.textSecondary}
+            />
           )}
         </View>
       </ScrollView>
-      {/* Add new activity button */}
-      <View className="absolute bottom-0 right-0 p-4">
-        <TouchableOpacity onPress={() => setOpenSheet(true)}>
-          <LinearGradient
-            colors={[THEME.primary, THEME.secondary]}
-            start={[0, 0]}
-            end={[1, 1]}
-            style={{
-              paddingVertical: 12,
-              paddingHorizontal: 12,
-              alignItems: "center",
-              justifyContent: "center",
 
-              borderRadius: 1000,
-              shadowColor: THEME.primary,
-              shadowOffset: { width: 0, height: 0 },
-              shadowOpacity: 0.7,
-              shadowRadius: 16,
-              elevation: 16, // For Android
-            }}
-          >
-            <View className="items-center justify-center flex-row gap-1">
-              <Feather name="plus" size={24} color={THEME.textPrimary} />
-              <Text
-                style={{ color: THEME.textPrimary }}
-                className="font-bold text-base"
-              >
-                New Budget
-              </Text>
-            </View>
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
+      {/* Floating action button */}
+      <NewBudgetButton
+        onPress={handleNewBudget}
+        primary={THEME.primary}
+        secondary={THEME.secondary}
+        textPrimary={THEME.textPrimary}
+      />
 
-      {/* Create Budget Sheet */}
+      {/* Create / Edit modal — self-contained via useBudgetOperations */}
       <BudgetModal
         openSheet={openSheet}
         setOpenSheet={setOpenSheet}
-        category={category}
-        setCategory={setCategory}
-        icon={icon}
-        setIcon={setIcon}
-        limit={limit}
-        setLimit={setLimit}
-        saving={saving}
-        handleCreateBudget={handleCreateBudget}
-        // edit-mode props
         editingBudget={editingBudget}
-        handleUpdateBudget={handleUpdateBudget}
-        isUpdating={saving}
-        onClose={() => {
-          setOpenSheet(false);
-          resetForm();
-        }}
+        onClose={handleModalClose}
       />
-
-      {/* Budget transactions modal removed: budgets no longer open a modal on tap */}
     </SafeAreaView>
   );
 }

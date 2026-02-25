@@ -1,4 +1,10 @@
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useRef,
+  ReactNode,
+} from "react";
 import {
   Modal,
   View,
@@ -39,15 +45,24 @@ export const AlertProvider = ({ children }: { children: ReactNode }) => {
   const [visible, setVisible] = useState(false);
   const [alertOptions, setAlertOptions] = useState<AlertOptions | null>(null);
   const { THEME } = useTheme();
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showAlert = (options: AlertOptions) => {
+    // Cancel any pending clear so the new alert content isn't wiped out
+    if (hideTimerRef.current) {
+      clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
     setAlertOptions(options);
     setVisible(true);
   };
 
   const hideAlert = () => {
     setVisible(false);
-    setTimeout(() => setAlertOptions(null), 300);
+    hideTimerRef.current = setTimeout(() => {
+      setAlertOptions(null);
+      hideTimerRef.current = null;
+    }, 300);
   };
 
   const handleButtonPress = (button?: AlertButton) => {

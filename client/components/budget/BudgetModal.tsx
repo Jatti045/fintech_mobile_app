@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import { useTheme } from "@/hooks/useRedux";
 import { useThemedAlert } from "@/utils/themedAlert";
+import { useBudgetOperations } from "@/hooks/budget/useBudgetOperation";
 import {
   Modal,
   ScrollView,
@@ -18,38 +19,30 @@ import IconSelectorModal from "./IconSelectorModal";
 function BudgetModal({
   openSheet,
   setOpenSheet,
-  category,
-  setCategory,
-  icon,
-  setIcon,
-  limit,
-  setLimit,
-  saving,
-  handleCreateBudget,
   editingBudget,
-  handleUpdateBudget,
-  isUpdating,
   onClose,
 }: {
   openSheet: boolean;
   setOpenSheet: (val: boolean) => void;
-  category: string;
-  setCategory: (val: string) => void;
-  icon: string;
-  setIcon: (val: string) => void;
-  limit: string;
-  setLimit: (val: string) => void;
-  saving: boolean;
-  handleCreateBudget: () => void;
   editingBudget?: any;
-  handleUpdateBudget?: (id: string, updates: any) => Promise<any>;
-  isUpdating?: boolean;
   onClose?: () => void;
 }) {
   const { THEME } = useTheme();
   const { showAlert } = useThemedAlert();
 
-  const [openIconSelector, setOpenIconSelector] = useState(false);
+  const {
+    budgetCategory: category,
+    setBudgetCategory: setCategory,
+    budgetIcon: icon,
+    setBudgetIcon: setIcon,
+    budgetLimit: limit,
+    setBudgetLimit: setLimit,
+    budgetSaving: saving,
+    handleCreateBudget,
+    handleUpdateBudget,
+  } = useBudgetOperations();
+
+  const [openIconSelector, setOpenIconSelector] = React.useState(false);
 
   const prevOpenRef = useRef(openSheet);
   useEffect(() => {
@@ -249,57 +242,12 @@ function BudgetModal({
           <View className="mt-6">
             <TouchableOpacity
               activeOpacity={0.9}
-              onPress={async () => {
-                if (editingBudget && handleUpdateBudget) {
-                  // basic validation
-                  if (!category.trim() || !icon || !limit.trim()) {
-                    showAlert({
-                      title: "Missing Information",
-                      message: "Please enter category, icon, and limit",
-                    });
-                    return;
-                  }
-                  const parsedCategory = category.trim();
-                  const parsedIcon = icon.trim();
-                  const parsedLimit = Number(limit);
-                  if (isNaN(parsedLimit) || parsedLimit < 0) {
-                    showAlert({
-                      title: "Invalid Amount",
-                      message: "Please enter a valid numeric limit",
-                    });
-                    return;
-                  }
-
-                  // detect no-op
-                  const noChange =
-                    String(parsedCategory) === String(editingBudget.category) &&
-                    Number(parsedLimit) === Number(editingBudget.limit) &&
-                    String(icon) === String(editingBudget.icon);
-                  if (noChange) {
-                    showAlert({
-                      title: "No changes detected",
-                      message: "Nothing to update",
-                    });
-                    return;
-                  }
-
-                  try {
-                    await handleUpdateBudget(editingBudget.id, {
-                      category: parsedCategory,
-                      icon: parsedIcon,
-                      limit: parsedLimit,
-                    });
-                    if (onClose) onClose();
-                  } catch (err: any) {
-                    showAlert({
-                      title: "Error",
-                      message: err?.message || "Failed to update",
-                    });
-                  }
-                  return;
+              onPress={() => {
+                if (editingBudget) {
+                  handleUpdateBudget(editingBudget, setOpenSheet);
+                } else {
+                  handleCreateBudget(setOpenSheet);
                 }
-                // create path
-                handleCreateBudget();
               }}
             >
               <LinearGradient
@@ -314,7 +262,7 @@ function BudgetModal({
               >
                 <Text style={{ color: THEME.textPrimary, fontWeight: "700" }}>
                   {editingBudget
-                    ? isUpdating
+                    ? saving
                       ? "Updating..."
                       : "Update Budget"
                     : "Save Budget"}

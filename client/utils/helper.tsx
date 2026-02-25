@@ -16,7 +16,7 @@ export function formatDate(dateString: string): string {
   const dateOnly = new Date(
     date.getFullYear(),
     date.getMonth(),
-    date.getDate()
+    date.getDate(),
   );
   const nowOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
@@ -34,3 +34,13 @@ export function formatDate(dateString: string): string {
     year: "numeric",
   });
 }
+
+// Number formatter without currency symbol (two decimals)
+export const formatNumber = (n: number) =>
+  new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 2,
+  }).format(n);
+
+// Currency formatter that uses a simple dollar symbol
+export const formatCurrency = (n: number) => `$${formatNumber(Number(n || 0))}`;
