@@ -479,10 +479,10 @@ const transactionSlice = createSlice({
             const oldAmt = Number(oldTx.amount || 0);
             const newAmt = Number(updated.amount || 0);
             if (oldAmt !== newAmt) {
-              state.monthSummary.totalAmount = Math.max(
-                0,
-                state.monthSummary.totalAmount - oldAmt + newAmt
-              );
+              state.monthSummary.totalAmount = Math.round(
+                Math.max(0, state.monthSummary.totalAmount - oldAmt + newAmt) *
+                  100
+              ) / 100;
             }
           }
           state.transactions = state.transactions.map((t) =>
