@@ -30,7 +30,6 @@ function InformationModal({
     <Modal
       visible={helpOpen}
       animationType="slide"
-      transparent={true}
       presentationStyle="pageSheet"
     >
       <SafeAreaView
@@ -206,16 +205,16 @@ function InformationModal({
               const trackHeight = viewportHeight;
               const thumbHeight = Math.max(
                 (viewportHeight / contentHeight) * trackHeight,
-                24
+                24,
               );
               const maxThumbTop = trackHeight - thumbHeight;
               const scrollableRange = Math.max(
                 contentHeight - viewportHeight,
-                1
+                1,
               );
               const thumbTop = Math.min(
                 (scrollY / scrollableRange) * maxThumbTop,
-                maxThumbTop
+                maxThumbTop,
               );
               return (
                 <View

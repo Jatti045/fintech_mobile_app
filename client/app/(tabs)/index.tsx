@@ -9,7 +9,10 @@ import {
   useBudgets,
   useCalendar,
   useTransactionMonthSummary,
+  useTransactionStatus,
+  useBudgetStatus,
 } from "@/hooks/useRedux";
+import { HomeSkeleton } from "@/components/skeleton/SkeletonLoader";
 import { useThemedAlert } from "@/utils/themedAlert";
 import CreateTransactionModal from "@/components/transaction/transactionModal";
 import BudgetModal from "@/components/budget/BudgetModal";
@@ -31,6 +34,14 @@ export default function Index() {
   const calendar = useCalendar();
   const monthSummary = useTransactionMonthSummary();
   const dispatch = useAppDispatch();
+  const { isLoading: isTransactionsLoading } = useTransactionStatus();
+  const { isLoading: isBudgetsLoading } = useBudgetStatus();
+
+  /** Show skeleton while initial data is loading (both transactions and budgets empty + loading) */
+  const isInitialLoading =
+    (isTransactionsLoading || isBudgetsLoading) &&
+    transactions.length === 0 &&
+    budgets.length === 0;
 
   const [helpOpen, setHelpOpen] = useState(false);
   const [openTxModal, setOpenTxModal] = useState(false);
@@ -112,6 +123,18 @@ export default function Index() {
   };
 
   // ── Render ───────────────────────────────────────────────────────────────────
+
+  // Show skeleton loader during initial data fetch
+  if (isInitialLoading) {
+    return (
+      <SafeAreaView
+        edges={["left", "right"]}
+        style={{ flex: 1, backgroundColor: THEME.background }}
+      >
+        <HomeSkeleton THEME={THEME} />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView

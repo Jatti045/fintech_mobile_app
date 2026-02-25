@@ -58,6 +58,13 @@ export const useBudgets = () => {
   return useAppSelector((state) => state.budget.budgets);
 };
 
+export const useBudgetStatus = () => {
+  return useAppSelector((state) => ({
+    isLoading: state.budget.loading,
+    error: state.budget.error,
+  }));
+};
+
 export const useCalendar = () => {
   return useAppSelector((state) => ({
     month: state.calendar.month,
