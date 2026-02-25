@@ -38,6 +38,7 @@ export const useTransactionStatus = () => {
   return useAppSelector((state) => ({
     isAdding: state.transaction.isAdding,
     isEditing: state.transaction.isEditing,
+    isDeleting: state.transaction.isDeleting,
     isLoading: state.transaction.isLoading,
     isLoadingMore: state.transaction.isLoadingMore,
     error: state.transaction.error,

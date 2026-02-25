@@ -1,31 +1,14 @@
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import {
-  Feather,
-  FontAwesome,
-  Ionicons,
-  MaterialIcons,
-} from "@expo/vector-icons";
-import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
+  ActivityIndicator,
   SectionList,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
-  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { LinearGradient } from "expo-linear-gradient";
-import { useEffect, useState } from "react";
-import {
-  createTransaction,
-  fetchTransaction,
-  fetchMoreTransactions,
-  deleteTransaction,
-  updateTransaction,
-} from "@/store/slices/transactionSlice";
+import { fetchMoreTransactions } from "@/store/slices/transactionSlice";
 import { useAppDispatch } from "@/store";
 import {
   useBudgets,
@@ -35,328 +18,422 @@ import {
   useCalendar,
   useTransactionPagination,
 } from "@/hooks/useRedux";
-import { TransactionType } from "@/api/transaction";
 import Loader from "@/utils/loader";
-import { formatDate, capitalizeFirst } from "@/utils/helper";
+import { formatDate, capitalizeFirst, formatCurrency } from "@/utils/helper";
 import TransactionModal from "@/components/transaction/transactionModal";
 import SearchTransaction from "@/components/transaction/searchTransaction";
 import AddNewTransactionButton from "@/components/transaction/addNewTransactionButton";
 import FilterTransaction from "@/components/transaction/filterTransaction";
-import { useThemedAlert } from "@/utils/themedAlert";
+import { useTransactionOperations } from "@/hooks/transaction/useTransactionOperation";
 
-export default function Index() {
-  // transaction, budget, theme, calendar state
+// ─── Types ──────────────────────────────────────────────────────────────────
+
+/** Minimal shape of a transaction as stored in Redux. */
+interface TransactionItem {
+  id: string;
+  name: string;
+  amount: number | string;
+  date: string;
+  category: string;
+  budgetId?: string;
+  type?: string;
+  icon?: string;
+}
+
+/** A single day-group for the SectionList. */
+interface GroupedSection {
+  title: string;
+  data: TransactionItem[];
+  /** Aggregated spend for the day in dollars (computed with integer-cent math). */
+  total: number;
+}
+
+// ─── Pure helpers (module-scope — never recreated) ──────────────────────────
+
+/**
+ * Returns a user-friendly label for a date key string.
+ * @returns "Today" | "Yesterday" | locale-formatted date
+ */
+function friendlyDayLabel(dayKey: string): string {
+  const d = new Date(dayKey);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+
+  if (d.toDateString() === today.toDateString()) return "Today";
+  if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return d.toLocaleDateString();
+}
+
+/**
+ * Safely coerces a possibly-string amount to a finite number.
+ * Returns `0` for NaN / Infinity / undefined / null — never throws.
+ */
+function safeAmount(raw: number | string | undefined | null): number {
+  const n = typeof raw === "string" ? parseFloat(raw) : Number(raw ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Sums an array of amounts using **integer-cent accumulation** to avoid
+ * floating-point drift common in financial calculations.
+ *
+ * @example sumAmountsCents([1.1, 2.2]) // => 3.30 (not 3.3000000000000003)
+ */
+function sumAmountsCents(items: { amount: number | string }[]): number {
+  const totalCents = items.reduce(
+    (acc, tx) => acc + Math.round(safeAmount(tx.amount) * 100),
+    0,
+  );
+  return totalCents / 100;
+}
+
+// ─── Memoised sub-components ────────────────────────────────────────────────
+
+/**
+ * Section header displaying the friendly day label and the section's total spend.
+ * Wrapped in `React.memo` so it only re-renders when its own props change.
+ */
+const SectionHeader = React.memo(function SectionHeader({
+  title,
+  total,
+  textSecondary,
+  textPrimary,
+}: {
+  title: string;
+  total: number;
+  textSecondary: string;
+  textPrimary: string;
+}) {
+  return (
+    <View className="py-2 flex-row justify-center items-center">
+      <Text
+        style={{ color: textSecondary, flex: 1 }}
+        numberOfLines={1}
+        ellipsizeMode="tail"
+      >
+        {friendlyDayLabel(title)}
+      </Text>
+      <Text
+        style={{ color: textPrimary, marginLeft: 8 }}
+        numberOfLines={1}
+        ellipsizeMode="tail"
+      >
+        {formatCurrency(total)}
+      </Text>
+    </View>
+  );
+});
+
+/**
+ * Single transaction row with press-to-edit and long-press-to-delete behaviour.
+ * All theme colours are passed as props to keep the component pure.
+ */
+const TransactionRow = React.memo(function TransactionRow({
+  tx,
+  onEdit,
+  onDelete,
+  surface,
+  border,
+  primary,
+  textPrimary,
+  textSecondary,
+  danger,
+}: {
+  tx: TransactionItem;
+  onEdit: (tx: TransactionItem) => void;
+  onDelete: (id: string) => void;
+  surface: string;
+  border: string;
+  primary: string;
+  textPrimary: string;
+  textSecondary: string;
+  danger: string;
+}) {
+  const amt = safeAmount(tx.amount);
+
+  return (
+    <TouchableOpacity
+      style={{
+        backgroundColor: surface,
+        borderColor: border,
+        borderWidth: 1,
+      }}
+      className="flex-row p-3 items-center justify-between mb-3 rounded-lg"
+      activeOpacity={0.8}
+      onPress={() => onEdit(tx)}
+      onLongPress={() => onDelete(tx.id)}
+    >
+      <View style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
+        <View
+          style={{ backgroundColor: border, padding: 10 }}
+          className="flex justify-center items-center rounded-full"
+        >
+          <Feather
+            name={(tx.icon || "dollar-sign") as any}
+            size={24}
+            color={primary}
+          />
+        </View>
+        <View style={{ marginLeft: 12, flex: 1, minWidth: 0 }}>
+          <Text
+            style={{ color: textPrimary, fontWeight: "700" }}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {capitalizeFirst(tx.category)}
+          </Text>
+          <Text
+            style={{ color: textSecondary }}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {formatDate(tx.date)} - {tx.name}
+          </Text>
+        </View>
+      </View>
+      <View style={{ marginLeft: 12, alignItems: "flex-end" }}>
+        <Text
+          style={{ color: danger, fontWeight: "700" }}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
+          - {formatCurrency(amt)}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+});
+
+/**
+ * Infinite-scroll footer: loading spinner, "Load More" button, or end-of-list.
+ */
+const ListFooter = React.memo(function ListFooter({
+  hasNextPage,
+  isLoadingMore,
+  hasTransactions,
+  onLoadMore,
+  secondary,
+  textSecondary,
+  background,
+}: {
+  hasNextPage: boolean;
+  isLoadingMore: boolean;
+  hasTransactions: boolean;
+  onLoadMore: () => void;
+  secondary: string;
+  textSecondary: string;
+  background: string;
+}) {
+  if (hasNextPage) {
+    return (
+      <View className="py-4 items-center">
+        {isLoadingMore ? (
+          <>
+            <ActivityIndicator size="small" color={secondary} />
+            <Text style={{ color: textSecondary, marginTop: 8 }}>
+              Loading more...
+            </Text>
+          </>
+        ) : (
+          <TouchableOpacity onPress={onLoadMore} activeOpacity={0.8}>
+            <Text style={{ color: textSecondary, fontSize: 12 }}>
+              Load More Transactions
+            </Text>
+            <Ionicons name="chevron-down" size={18} color={background} />
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  }
+
+  if (hasTransactions) {
+    return (
+      <View className="py-4 items-center">
+        <Text style={{ color: textSecondary, fontSize: 12 }}>
+          No more transactions
+        </Text>
+      </View>
+    );
+  }
+
+  return null;
+});
+
+// ─── Main Screen Component ──────────────────────────────────────────────────
+
+export default function TransactionScreen() {
+  // ── Redux selectors ─────────────────────────────────────────────────────
   const transactions = useTransactions();
   const budgets = useBudgets();
-
   const { THEME } = useTheme();
   const calendar = useCalendar();
-  const { showAlert } = useThemedAlert();
   const pagination = useTransactionPagination();
+  const { isAdding, isEditing, isDeleting, isLoadingMore } =
+    useTransactionStatus();
+  const dispatch = useAppDispatch();
 
-  // Transaction loading/editing state
-  const { isAdding, isEditing, isLoadingMore } = useTransactionStatus();
+  // Only the delete handler is needed at screen level;
+  // create + update are fully managed inside TransactionModal.
+  const { handleDeleteTransaction } = useTransactionOperations();
 
-  // Local state
+  // ── Screen-level state ────────────────────────────────────────────────
   const [openSheet, setOpenSheet] = useState(false);
-  const [editingTransaction, setEditingTransaction] = useState<any | null>(
-    null
-  );
-  const [name, setName] = useState("");
-  const [date, setDate] = useState(new Date());
-  const [selectedCategoryAndId, setSelectedCategoryAndId] = useState({
-    id: budgets[0]?.id || "",
-    name: budgets[0]?.category || "",
-  });
-  const [amount, setAmount] = useState("");
+  const [editingTransaction, setEditingTransaction] =
+    useState<TransactionItem | null>(null);
+
+  // Filter controls (owned by this screen, not the modal)
   const [searchQuery, setSearchQuery] = useState("");
   const [filterCategoryId, setFilterCategoryId] = useState<string | "all">(
-    "all"
+    "all",
   );
   const [minAmount, setMinAmount] = useState("");
   const [maxAmount, setMaxAmount] = useState("");
 
-  const dispatch = useAppDispatch();
+  /** Ref-based guard to prevent duplicate infinite-scroll dispatches. */
+  const loadMoreRef = useRef(false);
 
-  const clearFilters = () => {
+  // ── Derived / memoised data ───────────────────────────────────────────
+
+  /**
+   * Budget-id → category-name lookup map.
+   * Eliminates the O(n) `budgets.find()` that was previously executed
+   * per transaction inside the filter callback.
+   */
+  const budgetCategoryMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const b of budgets) {
+      map.set(b.id, (b.category ?? "").toLowerCase());
+    }
+    return map;
+  }, [budgets]);
+
+  /**
+   * Transactions filtered by category, amount range, and search query.
+   * Only EXPENSE-type transactions are shown.
+   */
+  const filteredTransactions = useMemo(() => {
+    const minParsed = minAmount.trim() !== "" ? Number(minAmount) || 0 : null;
+    const maxParsed = maxAmount.trim() !== "" ? Number(maxAmount) || 0 : null;
+    const query = searchQuery.trim().toLowerCase();
+
+    return transactions.filter((t: any) => {
+      // Category filter — O(1) map lookup instead of O(n) find
+      if (filterCategoryId !== "all") {
+        if (t.budgetId) {
+          if (t.budgetId !== filterCategoryId) return false;
+        } else {
+          const filterCat = budgetCategoryMap.get(filterCategoryId) ?? "";
+          if (String(t.category).toLowerCase() !== filterCat) return false;
+        }
+      }
+
+      // Only expenses
+      if ((t.type ?? "EXPENSE").toUpperCase() !== "EXPENSE") return false;
+
+      // Amount range
+      const amt = safeAmount(t.amount);
+      if (minParsed !== null && amt < minParsed) return false;
+      if (maxParsed !== null && amt > maxParsed) return false;
+
+      // Free-text search across name and category
+      if (query) {
+        const matchesName = String(t.name).toLowerCase().includes(query);
+        const matchesCat = String(t.category).toLowerCase().includes(query);
+        if (!matchesName && !matchesCat) return false;
+      }
+
+      return true;
+    });
+  }, [
+    transactions,
+    filterCategoryId,
+    budgetCategoryMap,
+    minAmount,
+    maxAmount,
+    searchQuery,
+  ]);
+
+  /**
+   * Grouped-by-day sections sorted newest-first with integer-cent totals.
+   *
+   * A single `useMemo` pass replaces the previous 3-step chain:
+   *   reduce → sort(sections) + sort(items) → map(totals)
+   * This avoids intermediate allocations and duplicate memoisation boundaries.
+   */
+  const sectionsWithTotals = useMemo<GroupedSection[]>(() => {
+    const groups: Record<string, TransactionItem[]> = {};
+
+    for (const t of filteredTransactions) {
+      const dayKey = new Date(t.date).toDateString();
+      (groups[dayKey] ??= []).push(t as TransactionItem);
+    }
+
+    return (
+      Object.entries(groups)
+        .map(([title, data]) => {
+          // Sort items within the section: newest first
+          data.sort(
+            (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+          );
+          return {
+            title,
+            data,
+            total: sumAmountsCents(data),
+          };
+        })
+        // Sort sections: newest day first
+        .sort(
+          (a, b) => new Date(b.title).getTime() - new Date(a.title).getTime(),
+        )
+    );
+  }, [filteredTransactions]);
+
+  /**
+   * Derived loader message — eliminates the manual `setTransactionStatusMsg` calls.
+   * The message is computed from Redux status flags that already track in-flight ops.
+   */
+  const loaderMessage = useMemo(() => {
+    if (isAdding) return "Adding transaction…";
+    if (isEditing) return "Updating transaction…";
+    if (isDeleting) return "Deleting transaction…";
+    return "";
+  }, [isAdding, isEditing, isDeleting]);
+
+  const isLoaderVisible = isAdding || isEditing || isDeleting;
+
+  // ── Stable callbacks ──────────────────────────────────────────────────
+
+  /** Reset all filter controls to their default values. */
+  const clearFilters = useCallback(() => {
     setFilterCategoryId("all");
     setMinAmount("");
     setMaxAmount("");
-  };
+  }, []);
 
-  // Precompute filtered transactions to keep JSX clean
-  const filteredTransactions = transactions.filter((t) => {
-    // category filter
-    if (filterCategoryId !== "all") {
-      if (t.budgetId) {
-        if (t.budgetId !== filterCategoryId) return false;
-      } else if (
-        String(t.category).toLowerCase() !==
-        String(
-          budgets.find((b) => b.id === filterCategoryId)?.category ?? ""
-        ).toLowerCase()
-      ) {
-        return false;
-      }
-    }
+  /** Open the modal in edit mode for the given transaction. */
+  const handleEditPress = useCallback((tx: TransactionItem) => {
+    setEditingTransaction(tx);
+    setOpenSheet(true);
+  }, []);
 
-    // only show expenses for now
-    if ((t.type ?? "EXPENSE").toUpperCase() !== "EXPENSE") return false;
-
-    // amount filters
-    const amt = Number(t.amount ?? 0) || 0;
-    if (minAmount.trim() !== "") {
-      const m = Number(minAmount) || 0;
-      if (amt < m) return false;
-    }
-    if (maxAmount.trim() !== "") {
-      const M = Number(maxAmount) || 0;
-      if (amt > M) return false;
-    }
-
-    // (date range filter removed)
-
-    // searchQuery
-    if (searchQuery.trim() !== "") {
-      const q = searchQuery.toLowerCase();
-      if (
-        !String(t.name).toLowerCase().includes(q) &&
-        !String(t.category).toLowerCase().includes(q)
-      )
-        return false;
-    }
-
-    return true;
-  });
-
-  // Group transactions by day (date-only) for SectionList
-  // Helper: friendly label for a day
-  const friendlyDayLabel = (dayKey: string) => {
-    const d = new Date(dayKey);
-    const today = new Date();
-    const yesterday = new Date();
-    yesterday.setDate(today.getDate() - 1);
-
-    const isToday = d.toDateString() === today.toDateString();
-    const isYesterday = d.toDateString() === yesterday.toDateString();
-    if (isToday) return "Today";
-    if (isYesterday) return "Yesterday";
-    return d.toLocaleDateString();
-  };
-
-  const groupedSections = Object.values(
-    filteredTransactions.reduce((acc: Record<string, any>, t) => {
-      const dayKey = new Date(t.date).toDateString();
-      if (!acc[dayKey]) acc[dayKey] = { title: dayKey, data: [] };
-      acc[dayKey].data.push(t);
-      return acc;
-    }, {})
-  );
-
-  // Sort sections by date (newest first) and sort items within each section (newest first)
-  groupedSections.sort(
-    (a: any, b: any) =>
-      new Date(b.title).getTime() - new Date(a.title).getTime()
-  );
-
-  // Sort items within each section
-  groupedSections.forEach((s: any) =>
-    s.data.sort(
-      (x: any, y: any) =>
-        new Date(y.date).getTime() - new Date(x.date).getTime()
-    )
-  );
-
-  // Compute totals per section
-  const sectionsWithTotals = groupedSections.map((s: any) => ({
-    ...s,
-    total: s.data.reduce(
-      (sum: number, tx: any) => sum + Number(tx.amount || 0),
-      0
-    ),
-  }));
-
-  // Handle creating a new transaction
-  const handleCreateTransaction = async () => {
-    // Validate inputs
-    if (!name || !date || !selectedCategoryAndId || amount === "") {
-      showAlert({ title: "Please fill all fields" });
-      return;
-    }
-
-    const currentMonth = calendar.month;
-    const currentYear = calendar.year;
-
-    const newTransaction = {
-      name,
-      month: currentMonth,
-      year: currentYear,
-      category: selectedCategoryAndId.name,
-      budgetId: selectedCategoryAndId.id,
-      amount: parseFloat(amount),
-      date: date.toISOString(),
-      type: TransactionType.EXPENSE,
-    };
-
-    // Dispatch create transaction action here
-    const response = await dispatch(createTransaction(newTransaction));
-
-    const { success, message } = response.payload as {
-      success: boolean;
-      message: string;
-    };
-
-    if (success) {
-      setOpenSheet(false);
-
-      // Reset form
-      setName("");
-      setDate(new Date());
-      setSelectedCategoryAndId({
-        id: budgets[0]?.id || "",
-        name: budgets[0]?.category || "",
-      });
-      setAmount("");
-      setEditingTransaction(null);
-
-      // Show success message
-      showAlert({ title: "Transaction added successfully!" });
-    } else {
-      showAlert({
-        title: "Error",
-        message: message || "Failed to add transaction",
-      });
-    }
-  };
-
-  // Handle updating an existing transaction
-  const handleUpdateTransaction = async (id: string, updates: any) => {
-    const noChange =
-      editingTransaction.name === name &&
-      Number(editingTransaction.amount) === Number(amount) &&
-      (editingTransaction.budgetId || "") ===
-        (selectedCategoryAndId.id || "") &&
-      new Date(editingTransaction.date).toISOString() ===
-        new Date(date).toISOString();
-
-    if (noChange) {
-      showAlert({
-        title: "No changes detected",
-        message: "No changes were made to the transaction.",
-      });
-      return;
-    }
-
-    const txUpdates: any = {};
-    if (editingTransaction.name !== name) txUpdates.name = name;
-    if (Number(editingTransaction.amount) !== Number(amount))
-      txUpdates.amount = Number(amount);
-    if (
-      (editingTransaction.budgetId || "") !== (selectedCategoryAndId.id || "")
-    )
-      txUpdates.budgetId = selectedCategoryAndId.id || null;
-    if (
-      new Date(editingTransaction.date).toISOString() !==
-      new Date(date).toISOString()
-    )
-      txUpdates.date = date.toISOString();
-
-    try {
-      const response = await dispatch(
-        updateTransaction({ id: editingTransaction.id, updates: txUpdates })
-      );
-
-      const { success, message } = response.payload as {
-        success: boolean;
-        message: string;
-      };
-
-      if (success) {
-        showAlert({
-          title: "Updated",
-          message: "Transaction updated successfully",
-        });
-        setOpenSheet(false);
-      } else {
-        showAlert({
-          title: "Error",
-          message: message || "Failed to update transaction",
-        });
-      }
-    } catch (e: any) {
-      showAlert({
-        title: "Error",
-        message: e?.message || "Failed to update transaction",
-      });
-    }
-  };
-
-  // Handle deleting a transaction
-  const handleDeleteTransaction = async (id: string) => {
-    showAlert({
-      title: "Delete Transaction",
-      message: "Are you sure you want to delete this transaction?",
-      buttons: [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              const response = await dispatch(deleteTransaction(id ?? ""));
-
-              const payload: any = response?.payload ?? null;
-              const success: boolean = payload?.success ?? false;
-              const message: string = payload?.message ?? "";
-
-              // Add delay to allow previous alert to fully dismiss
-              setTimeout(() => {
-                if (success) {
-                  showAlert({
-                    title: "Deleted",
-                    message: "Transaction deleted successfully.",
-                  });
-                } else {
-                  showAlert({
-                    title: "Error",
-                    message: message || "Failed to delete transaction",
-                  });
-                }
-              }, 400);
-            } catch (err: any) {
-              setTimeout(() => {
-                showAlert({
-                  title: "Error",
-                  message: err.message || "Failed to delete transaction",
-                });
-              }, 400);
-            }
-          },
-        },
-      ],
-    });
-  };
-
-  // Reset form when modal closes
-  const resetForm = () => {
-    setName("");
-    setDate(new Date());
-    setSelectedCategoryAndId({
-      id: budgets[0]?.id || "",
-      name: budgets[0]?.category || "",
-    });
-    setAmount("");
+  /** Clear editing state when the modal closes. */
+  const handleModalClose = useCallback(() => {
     setEditingTransaction(null);
-  };
+  }, []);
 
-  // Handle loading more transactions (infinite scroll)
-  const handleLoadMore = () => {
-    // Don't load if already loading or no more pages
-    if (isLoadingMore || !pagination.hasNextPage) {
-      return;
-    }
+  /**
+   * Infinite-scroll handler with `useRef` guard.
+   * The ref prevents a second dispatch while a previous `fetchMoreTransactions`
+   * is still in flight — even if React batches state updates that haven't yet
+   * flipped `isLoadingMore` to `true`.
+   */
+  const handleLoadMore = useCallback(() => {
+    if (loadMoreRef.current || isLoadingMore || !pagination.hasNextPage) return;
 
+    loadMoreRef.current = true;
     const nextPage = pagination.currentPage + 1;
+
     dispatch(
       fetchMoreTransactions({
         searchQuery: "",
@@ -364,26 +441,93 @@ export default function Index() {
         currentYear: calendar.year,
         page: nextPage,
         limit: 10,
-      })
-    );
-  };
-
-  const monthStartDate = new Date(calendar.year, calendar.month, 1);
-  // Current day of the selected month
-  const monthLastMoment = new Date(
+      }),
+    ).finally(() => {
+      loadMoreRef.current = false;
+    });
+  }, [
+    isLoadingMore,
+    pagination.hasNextPage,
+    pagination.currentPage,
+    calendar.month,
     calendar.year,
-    calendar.month + 1,
-    0,
-    23,
-    59,
-    59,
-    999
+    dispatch,
+  ]);
+
+  // ── SectionList render callbacks (stable references) ──────────────────
+
+  const renderSectionHeader = useCallback(
+    ({
+      section,
+    }: {
+      section: { title: string; total: number; data: TransactionItem[] };
+    }) => (
+      <SectionHeader
+        title={section.title}
+        total={section.total}
+        textSecondary={THEME.textSecondary}
+        textPrimary={THEME.textPrimary}
+      />
+    ),
+    [THEME.textSecondary, THEME.textPrimary],
   );
-  // End of today (local) — prevents selecting future dates
-  const todayEnd = new Date();
-  todayEnd.setHours(23, 59, 59, 999);
-  // Use the earlier of month end and today end so user can't pick future days
-  const monthEndDate = todayEnd < monthLastMoment ? todayEnd : monthLastMoment;
+
+  const renderItem = useCallback(
+    ({ item }: { item: TransactionItem }) => (
+      <TransactionRow
+        tx={item}
+        onEdit={handleEditPress}
+        onDelete={handleDeleteTransaction}
+        surface={THEME.surface}
+        border={THEME.border}
+        primary={THEME.primary}
+        textPrimary={THEME.textPrimary}
+        textSecondary={THEME.textSecondary}
+        danger={THEME.danger}
+      />
+    ),
+    [
+      handleEditPress,
+      handleDeleteTransaction,
+      THEME.surface,
+      THEME.border,
+      THEME.primary,
+      THEME.textPrimary,
+      THEME.textSecondary,
+      THEME.danger,
+    ],
+  );
+
+  const keyExtractor = useCallback(
+    (item: TransactionItem, index: number) => item.id ?? String(index),
+    [],
+  );
+
+  /** Memoised footer element — avoids re-creating the subtree every render. */
+  const listFooter = useMemo(
+    () => (
+      <ListFooter
+        hasNextPage={pagination.hasNextPage}
+        isLoadingMore={isLoadingMore}
+        hasTransactions={transactions.length > 0}
+        onLoadMore={handleLoadMore}
+        secondary={THEME.secondary}
+        textSecondary={THEME.textSecondary}
+        background={THEME.background}
+      />
+    ),
+    [
+      pagination.hasNextPage,
+      isLoadingMore,
+      transactions.length,
+      handleLoadMore,
+      THEME.secondary,
+      THEME.textSecondary,
+      THEME.background,
+    ],
+  );
+
+  // ── Render ────────────────────────────────────────────────────────────
 
   return (
     <SafeAreaView
@@ -391,6 +535,7 @@ export default function Index() {
       style={{ backgroundColor: THEME.background, flex: 1 }}
       className="px-4"
     >
+      {/* Screen title */}
       <View className="items-center justify-center my-4 mb-6">
         <Text
           style={{ color: THEME.textPrimary }}
@@ -399,11 +544,14 @@ export default function Index() {
           Transactions
         </Text>
       </View>
+
+      {/* Search bar */}
       <SearchTransaction
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
       />
-      {/* Transaction filters */}
+
+      {/* Category + amount filters */}
       <FilterTransaction
         budgets={budgets}
         filterCategoryId={filterCategoryId}
@@ -414,6 +562,8 @@ export default function Index() {
         setMaxAmount={setMaxAmount}
         clearFilters={clearFilters}
       />
+
+      {/* Transaction list or empty state */}
       {sectionsWithTotals.length === 0 ? (
         <View className="py-12 items-center">
           <Text style={{ color: THEME.textSecondary }}>
@@ -423,154 +573,29 @@ export default function Index() {
       ) : (
         <SectionList
           sections={sectionsWithTotals}
-          keyExtractor={(item, index) => item.id ?? index.toString()}
-          renderSectionHeader={({ section: { title, total } }: any) => (
-            <View className="py-2 flex-row justify-center items-center">
-              <Text
-                style={{ color: THEME.textSecondary, flex: 1 }}
-                numberOfLines={1}
-                ellipsizeMode="tail"
-              >
-                {friendlyDayLabel(title)}
-              </Text>
-              <Text
-                style={{ color: THEME.textPrimary, marginLeft: 8 }}
-                numberOfLines={1}
-                ellipsizeMode="tail"
-              >
-                ${Number(total).toFixed(2)}
-              </Text>
-            </View>
-          )}
-          renderItem={({ item: tx, index }) => (
-            <TouchableOpacity
-              key={tx.id}
-              style={{
-                backgroundColor: THEME.surface,
-                borderColor: THEME.border,
-                borderWidth: 1,
-              }}
-              className="flex-row p-3 items-center justify-between mb-3 rounded-lg"
-              activeOpacity={0.8}
-              onPress={() => {
-                // Open modal in edit mode
-                setEditingTransaction(tx);
-                setOpenSheet(true);
-              }}
-              onLongPress={() => handleDeleteTransaction(tx.id)}
-            >
-              <View
-                style={{ flex: 1, flexDirection: "row", alignItems: "center" }}
-              >
-                <View
-                  style={{
-                    backgroundColor: THEME.border,
-                    padding: 12,
-                    borderRadius: 999,
-                  }}
-                  className="rounded-full"
-                >
-                  <Feather
-                    name={tx.icon === "" ? "dollar-sign" : tx.icon}
-                    size={24}
-                    color={THEME.secondary}
-                  />
-                </View>
-                <View style={{ marginLeft: 12, flex: 1, minWidth: 0 }}>
-                  <Text
-                    style={{ color: THEME.textPrimary, fontWeight: "700" }}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                  >
-                    {capitalizeFirst(tx.category)}
-                  </Text>
-                  <Text
-                    style={{ color: THEME.textSecondary }}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                  >
-                    {formatDate(tx.date)} - {tx.name}
-                  </Text>
-                </View>
-              </View>
-              <View style={{ marginLeft: 12, alignItems: "flex-end" }}>
-                <Text
-                  style={{ color: THEME.danger, fontWeight: "700" }}
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                >
-                  - ${Number(tx.amount).toFixed(2)}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          )}
+          keyExtractor={keyExtractor}
+          renderSectionHeader={renderSectionHeader as any}
+          renderItem={renderItem as any}
           contentContainerStyle={{ paddingBottom: 120, paddingTop: 8 }}
           showsVerticalScrollIndicator={false}
-          ListFooterComponent={
-            pagination.hasNextPage ? (
-              <View className="py-4 items-center">
-                {isLoadingMore ? (
-                  <>
-                    <ActivityIndicator size="small" color={THEME.secondary} />
-                    <Text style={{ color: THEME.textSecondary, marginTop: 8 }}>
-                      Loading more...
-                    </Text>
-                  </>
-                ) : (
-                  <TouchableOpacity
-                    onPress={handleLoadMore}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={{ color: THEME.textSecondary, fontSize: 12 }}>
-                      Load More Transactions
-                    </Text>
-                    <Ionicons
-                      name="chevron-down"
-                      size={18}
-                      color={THEME.background}
-                    />
-                  </TouchableOpacity>
-                )}
-              </View>
-            ) : transactions.length > 0 ? (
-              <View className="py-4 items-center">
-                <Text style={{ color: THEME.textSecondary, fontSize: 12 }}>
-                  No more transactions
-                </Text>
-              </View>
-            ) : null
-          }
+          ListFooterComponent={listFooter}
         />
       )}
 
-      {/* Sheet Modal to add new transaction */}
+      {/* Create / Edit modal — self-contained via useTransactionOperations */}
       <TransactionModal
         openSheet={openSheet}
         setOpenSheet={setOpenSheet}
-        name={name}
-        setName={setName}
-        amount={amount}
-        setAmount={setAmount}
-        selectedCategoryAndId={selectedCategoryAndId}
-        setSelectedCategoryAndId={setSelectedCategoryAndId}
-        date={date}
-        setDate={setDate}
-        monthStartDate={monthStartDate}
-        monthEndDate={monthEndDate}
         budgets={budgets}
-        handleCreateTransaction={handleCreateTransaction}
-        capitalizeFirst={capitalizeFirst}
         editingTransaction={editingTransaction}
-        handleUpdateTransaction={handleUpdateTransaction}
-        isSaving={isEditing}
-        onClose={resetForm}
+        onClose={handleModalClose}
       />
 
-      {/* Add new transaction button */}
+      {/* Floating action button */}
       <AddNewTransactionButton setOpenSheet={setOpenSheet} budgets={budgets} />
 
-      {/* Loader */}
-      {isAdding && <Loader msg="Adding transaction..." />}
+      {/* Full-screen loader overlay */}
+      {isLoaderVisible ? <Loader msg={loaderMessage} /> : null}
     </SafeAreaView>
   );
 }

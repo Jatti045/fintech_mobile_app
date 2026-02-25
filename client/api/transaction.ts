@@ -70,8 +70,8 @@ class TransactionAPI extends BaseAPI {
     limit?: number;
   }): Promise<ITransactionResponse<ITransaction[]>> {
     const params: any = { searchQuery, page, limit };
-    if (currentMonth) params.currentMonth = currentMonth;
-    if (currentYear) params.currentYear = currentYear;
+    if (currentMonth != null) params.currentMonth = currentMonth;
+    if (currentYear != null) params.currentYear = currentYear;
     if (startDate) params.startDate = startDate;
     if (endDate) params.endDate = endDate;
     if (budgetId) params.budgetId = budgetId;

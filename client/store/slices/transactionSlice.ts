@@ -107,6 +107,7 @@ export const fetchTransaction = createAsyncThunk(
     { rejectWithValue }
   ) => {
     try {
+      console.log("Fetching transactions with params:", currentMonth, currentYear);
       // Disable cache when using pagination beyond first page
       if (page > 1 || !useCache) {
         const response = await transactionAPI.fetchAll({
@@ -414,9 +415,13 @@ const transactionSlice = createSlice({
 
         state.isAdding = false;
         state.error = null;
-        state.transactions.push(
-          action.payload.data?.transaction ?? action.payload.data
-        );
+        const created = action.payload.data?.transaction ?? action.payload.data;
+        state.transactions.push(created);
+
+        // Optimistically update monthSummary when an EXPENSE is added
+        if (created && (created.type ?? "EXPENSE").toUpperCase() === "EXPENSE") {
+          state.monthSummary.totalAmount += Number(created.amount || 0);
+        }
       })
       .addCase(createTransaction.rejected, (state, action) => {
         state.isAdding = false;
@@ -433,6 +438,14 @@ const transactionSlice = createSlice({
         const payload = action.payload ?? null;
         const deletedId = payload?.data?.deletedTransactionId ?? null;
         if (deletedId) {
+          // Find the transaction before removing so we can adjust the summary
+          const deletedTx = state.transactions.find((t) => t.id === deletedId);
+          if (deletedTx && (deletedTx.type ?? "EXPENSE").toUpperCase() === "EXPENSE") {
+            state.monthSummary.totalAmount = Math.max(
+              0,
+              state.monthSummary.totalAmount - Number(deletedTx.amount || 0)
+            );
+          }
           state.transactions = state.transactions.filter(
             (t) => t.id !== deletedId
           );
@@ -460,6 +473,18 @@ const transactionSlice = createSlice({
         state.error = null;
         const updated = action.payload.data?.transaction ?? action.payload.data;
         if (updated && updated.id) {
+          // Adjust monthSummary if the amount changed on an EXPENSE transaction
+          const oldTx = state.transactions.find((t) => t.id === updated.id);
+          if (oldTx && (oldTx.type ?? "EXPENSE").toUpperCase() === "EXPENSE") {
+            const oldAmt = Number(oldTx.amount || 0);
+            const newAmt = Number(updated.amount || 0);
+            if (oldAmt !== newAmt) {
+              state.monthSummary.totalAmount = Math.max(
+                0,
+                state.monthSummary.totalAmount - oldAmt + newAmt
+              );
+            }
+          }
           state.transactions = state.transactions.map((t) =>
             t.id === updated.id ? updated : t
           );
