@@ -441,9 +441,9 @@ const transactionSlice = createSlice({
           // Find the transaction before removing so we can adjust the summary
           const deletedTx = state.transactions.find((t) => t.id === deletedId);
           if (deletedTx && (deletedTx.type ?? "EXPENSE").toUpperCase() === "EXPENSE") {
-            state.monthSummary.totalAmount = Math.max(
-              0,
-              state.monthSummary.totalAmount - Number(deletedTx.amount || 0)
+            const amt = parseFloat(Number(deletedTx.amount || 0).toFixed(2));
+            state.monthSummary.totalAmount = parseFloat(
+              Math.max(0, state.monthSummary.totalAmount - amt).toFixed(2)
             );
           }
           state.transactions = state.transactions.filter(
