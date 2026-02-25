@@ -107,7 +107,6 @@ export const fetchTransaction = createAsyncThunk(
     { rejectWithValue }
   ) => {
     try {
-      console.log("Fetching transactions with params:", currentMonth, currentYear);
       // Disable cache when using pagination beyond first page
       if (page > 1 || !useCache) {
         const response = await transactionAPI.fetchAll({
