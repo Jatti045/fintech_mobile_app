@@ -10,7 +10,12 @@ export const useTransactionForm = () => {
 
   const type = TransactionType.EXPENSE; // default to expense, can be extended to support income if needed
   const monthStartDate = new Date(currentYear, currentMonth, 1);
-  const monthEndDate = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59);
+  const today = new Date();
+  const isCurrentMonth =
+    currentYear === today.getFullYear() && currentMonth === today.getMonth();
+  const monthEndDate = isCurrentMonth
+    ? new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59)
+    : new Date(currentYear, currentMonth + 1, 0, 23, 59, 59);
 
   const [txName, setTxName] = useState("");
   const [txAmount, setTxAmount] = useState("");
