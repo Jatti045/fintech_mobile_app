@@ -107,7 +107,6 @@ export const fetchTransaction = createAsyncThunk(
     { rejectWithValue }
   ) => {
     try {
-      console.log("Fetching transactions with params:", currentMonth, currentYear);
       // Disable cache when using pagination beyond first page
       if (page > 1 || !useCache) {
         const response = await transactionAPI.fetchAll({
@@ -420,7 +419,8 @@ const transactionSlice = createSlice({
 
         // Optimistically update monthSummary when an EXPENSE is added
         if (created && (created.type ?? "EXPENSE").toUpperCase() === "EXPENSE") {
-          state.monthSummary.totalAmount += Number(created.amount || 0);
+          state.monthSummary.totalAmount =
+            Math.round((state.monthSummary.totalAmount + Number(created.amount || 0)) * 100) / 100;
         }
       })
       .addCase(createTransaction.rejected, (state, action) => {
@@ -441,9 +441,9 @@ const transactionSlice = createSlice({
           // Find the transaction before removing so we can adjust the summary
           const deletedTx = state.transactions.find((t) => t.id === deletedId);
           if (deletedTx && (deletedTx.type ?? "EXPENSE").toUpperCase() === "EXPENSE") {
-            state.monthSummary.totalAmount = Math.max(
-              0,
-              state.monthSummary.totalAmount - Number(deletedTx.amount || 0)
+            const amt = parseFloat(Number(deletedTx.amount || 0).toFixed(2));
+            state.monthSummary.totalAmount = parseFloat(
+              Math.max(0, state.monthSummary.totalAmount - amt).toFixed(2)
             );
           }
           state.transactions = state.transactions.filter(
