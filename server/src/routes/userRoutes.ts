@@ -8,6 +8,7 @@ import {
   deleteProfilePicture,
   deleteAccount,
   changePassword,
+  updateCurrency,
 } from "../controllers/userController";
 import authMiddleware from "../middleware/authMiddleware";
 import { uploadMiddleware } from "../middleware/uploadMiddleware";
@@ -27,11 +28,14 @@ router.post(
   "/:userId/upload",
   authMiddleware,
   uploadMiddleware,
-  uploadProfilePicture
+  uploadProfilePicture,
 );
 
 // Delete profile picture
 router.delete("/:userId/profile-picture", authMiddleware, deleteProfilePicture);
+
+// Update preferred currency
+router.put("/currency", authMiddleware, updateCurrency);
 
 // Delete account
 router.delete("/delete/:userId", authMiddleware, deleteAccount);

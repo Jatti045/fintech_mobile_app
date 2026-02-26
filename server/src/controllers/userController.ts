@@ -93,7 +93,7 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
   // Generate JWT
   const token = jwt.sign(
     { username: user.username, email: user.email, userId: user.id },
-    ENV.JWT_SECRET_KEY as string
+    ENV.JWT_SECRET_KEY as string,
   );
 
   res.status(200).json({
@@ -168,7 +168,7 @@ export const deleteAccount = asyncHandler(
         message: errorMessage,
       });
     }
-  }
+  },
 );
 
 export const uploadProfilePicture = asyncHandler(
@@ -220,7 +220,7 @@ export const uploadProfilePicture = asyncHandler(
       const { url: profilePicUrl, publicId } = await uploadToCloudinary(
         req.file.buffer,
         req.file.originalname,
-        "profile-pictures"
+        "profile-pictures",
       );
 
       // Update user's profile picture in database
@@ -258,7 +258,7 @@ export const uploadProfilePicture = asyncHandler(
         message: errorMessage,
       });
     }
-  }
+  },
 );
 
 export const deleteProfilePicture = asyncHandler(
@@ -320,7 +320,7 @@ export const deleteProfilePicture = asyncHandler(
         error instanceof Error ? error.message : "Server Error";
       res.status(500).json({ success: false, message: errorMessage });
     }
-  }
+  },
 );
 
 export const changePassword = asyncHandler(
@@ -359,7 +359,7 @@ export const changePassword = asyncHandler(
 
       const match = await bcrypt.compare(
         currentPassword,
-        existingUser.password
+        existingUser.password,
       );
       if (!match) {
         return res
@@ -380,7 +380,7 @@ export const changePassword = asyncHandler(
       logger.error("Error changing password:", error);
       res.status(500).json({ success: false, message: "Server error" });
     }
-  }
+  },
 );
 
 export const forgotPassword = asyncHandler(
@@ -439,7 +439,7 @@ export const forgotPassword = asyncHandler(
       logger.error("Error in forgotPassword:", error);
       res.status(500).json({ success: false, message: "Server error" });
     }
-  }
+  },
 );
 
 export const resetPassword = asyncHandler(
@@ -542,5 +542,49 @@ export const resetPassword = asyncHandler(
       logger.error("Error in resetPassword:", error);
       res.status(500).json({ success: false, message: "Server error" });
     }
-  }
+  },
+);
+
+export const updateCurrency = asyncHandler(
+  async (req: Request, res: Response) => {
+    logger.info("Update currency endpoint hit...");
+    try {
+      const userId = req.user?.userId;
+      if (!userId) {
+        return res
+          .status(401)
+          .json({ success: false, message: "Unauthorized" });
+      }
+
+      const { currency } = req.body;
+      if (!currency || typeof currency !== "string") {
+        return res
+          .status(400)
+          .json({ success: false, message: "Currency code is required." });
+      }
+
+      const updatedUser = await prisma.user.update({
+        where: { id: userId },
+        data: { currency: currency.toUpperCase() },
+        select: {
+          id: true,
+          username: true,
+          email: true,
+          profilePic: true,
+          currency: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      res.status(200).json({
+        success: true,
+        message: "Currency updated successfully.",
+        data: updatedUser,
+      });
+    } catch (error) {
+      logger.error("Error updating currency:", error);
+      res.status(500).json({ success: false, message: "Server error" });
+    }
+  },
 );
