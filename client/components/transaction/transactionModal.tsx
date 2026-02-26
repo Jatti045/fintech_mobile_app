@@ -3,6 +3,7 @@ import { useThemedAlert } from "@/utils/themedAlert";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import {
+  FlatList,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -20,6 +21,12 @@ import ModalCloseButton from "../modalCloseButton";
 import { IBudget } from "@/store/slices/budgetSlice";
 import { capitalizeFirst } from "@/utils/helper";
 import { useTransactionOperations } from "@/hooks/transaction/useTransactionOperation";
+import {
+  CURRENCIES,
+  getCurrencyByCode,
+  getCurrencySymbol,
+} from "@/constants/Currencies";
+import { getExchangeRate } from "@/utils/currencyConverter";
 
 function TransactionModal({
   openSheet,
@@ -37,6 +44,10 @@ function TransactionModal({
   const { THEME } = useTheme();
   const { showAlert } = useThemedAlert();
   const [showPicker, setShowPicker] = useState(false);
+  const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
+  const [conversionPreview, setConversionPreview] = useState<string | null>(
+    null,
+  );
 
   const {
     txName,
@@ -47,6 +58,9 @@ function TransactionModal({
     setTxDate,
     txSelectedCategoryAndId,
     setTxSelectedCategoryAndId,
+    txCurrency,
+    setTxCurrency,
+    userCurrency,
     monthStartDate,
     monthEndDate,
     handleCreateTransaction,
@@ -63,6 +77,8 @@ function TransactionModal({
         setTxAmount("");
         setTxSelectedCategoryAndId({ id: "", name: "" });
         setTxDate(new Date());
+        setTxCurrency(userCurrency);
+        setConversionPreview(null);
       } catch (e) {
         // ignore
       }
@@ -91,6 +107,31 @@ function TransactionModal({
       }
     }
   }, [editingTransaction]);
+
+  // Show a live conversion preview when amount or currency changes
+  useEffect(() => {
+    if (txCurrency === userCurrency || !txAmount || Number(txAmount) <= 0) {
+      setConversionPreview(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const rate = await getExchangeRate(txCurrency, userCurrency);
+        if (!cancelled) {
+          const converted = (Number(txAmount) * rate).toFixed(2);
+          setConversionPreview(
+            `≈ ${getCurrencySymbol(userCurrency)}${converted} ${userCurrency} (rate: ${rate.toFixed(4)})`,
+          );
+        }
+      } catch {
+        if (!cancelled) setConversionPreview("Unable to fetch rate");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [txAmount, txCurrency, userCurrency]);
 
   const clampDate = (d: Date) => {
     if (d < monthStartDate) return new Date(monthStartDate);
@@ -198,6 +239,92 @@ function TransactionModal({
                   dot for decimals.
                 </Text>
               </View>
+
+              {/* Currency Selector */}
+              <View>
+                <Text style={{ color: THEME.textPrimary }} className="mb-2">
+                  Currency
+                </Text>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => setShowCurrencyPicker(true)}
+                  style={{
+                    backgroundColor: THEME.inputBackground,
+                    borderColor: THEME.border,
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    padding: 12,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 8,
+                    }}
+                  >
+                    <Text style={{ fontSize: 18 }}>
+                      {getCurrencyByCode(txCurrency)?.flag}
+                    </Text>
+                    <Text
+                      style={{ color: THEME.textPrimary, fontWeight: "600" }}
+                    >
+                      {txCurrency}
+                    </Text>
+                    <Text style={{ color: THEME.textSecondary }}>
+                      — {getCurrencyByCode(txCurrency)?.name}
+                    </Text>
+                  </View>
+                  <Ionicons
+                    name="chevron-down"
+                    size={18}
+                    color={THEME.textSecondary}
+                  />
+                </TouchableOpacity>
+
+                {/* Conversion preview */}
+                {conversionPreview && (
+                  <View
+                    style={{
+                      marginTop: 8,
+                      backgroundColor: THEME.surface,
+                      borderRadius: 8,
+                      padding: 10,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <Ionicons
+                      name="swap-horizontal"
+                      size={16}
+                      color={THEME.primary}
+                    />
+                    <Text
+                      style={{
+                        color: THEME.primary,
+                        fontSize: 13,
+                        fontWeight: "500",
+                      }}
+                    >
+                      {conversionPreview}
+                    </Text>
+                  </View>
+                )}
+
+                {txCurrency !== userCurrency && (
+                  <Text
+                    style={{ color: THEME.textSecondary, marginTop: 6 }}
+                    className="text-sm"
+                  >
+                    Amount will be converted to {userCurrency} before saving.
+                  </Text>
+                )}
+              </View>
+
               {/* Category Selector */}
               <View>
                 <Text style={{ color: THEME.textPrimary }} className="mb-4">
@@ -390,6 +517,128 @@ function TransactionModal({
             </View>
           </KeyboardAvoidingView>
         </ScrollView>
+
+        {/* Currency Picker Modal */}
+        {showCurrencyPicker && (
+          <Modal
+            visible={showCurrencyPicker}
+            animationType="slide"
+            transparent={true}
+          >
+            <View
+              style={{
+                flex: 1,
+                backgroundColor: "rgba(0,0,0,0.5)",
+                justifyContent: "flex-end",
+              }}
+            >
+              <View
+                style={{
+                  backgroundColor: THEME.background,
+                  borderTopLeftRadius: 20,
+                  borderTopRightRadius: 20,
+                  maxHeight: "70%",
+                  paddingBottom: 30,
+                }}
+              >
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: 16,
+                    borderBottomWidth: 1,
+                    borderBottomColor: THEME.border,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: THEME.textPrimary,
+                      fontSize: 18,
+                      fontWeight: "700",
+                    }}
+                  >
+                    Select Currency
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => setShowCurrencyPicker(false)}
+                  >
+                    <Ionicons
+                      name="close"
+                      size={24}
+                      color={THEME.textPrimary}
+                    />
+                  </TouchableOpacity>
+                </View>
+                <FlatList
+                  data={CURRENCIES}
+                  keyExtractor={(item) => item.code}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      onPress={() => {
+                        setTxCurrency(item.code);
+                        setShowCurrencyPicker(false);
+                      }}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        padding: 14,
+                        paddingHorizontal: 20,
+                        backgroundColor:
+                          item.code === txCurrency
+                            ? THEME.primary + "20"
+                            : "transparent",
+                        borderBottomWidth: 0.5,
+                        borderBottomColor: THEME.border,
+                      }}
+                    >
+                      <Text style={{ fontSize: 22, marginRight: 12 }}>
+                        {item.flag}
+                      </Text>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={{
+                            color: THEME.textPrimary,
+                            fontWeight:
+                              item.code === txCurrency ? "700" : "500",
+                            fontSize: 15,
+                          }}
+                        >
+                          {item.code}{" "}
+                          <Text
+                            style={{
+                              color: THEME.textSecondary,
+                              fontWeight: "400",
+                            }}
+                          >
+                            — {item.name}
+                          </Text>
+                        </Text>
+                      </View>
+                      <Text
+                        style={{
+                          color: THEME.textSecondary,
+                          fontSize: 16,
+                          fontWeight: "600",
+                        }}
+                      >
+                        {item.symbol}
+                      </Text>
+                      {item.code === txCurrency && (
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={20}
+                          color={THEME.primary}
+                          style={{ marginLeft: 8 }}
+                        />
+                      )}
+                    </TouchableOpacity>
+                  )}
+                />
+              </View>
+            </View>
+          </Modal>
+        )}
       </SafeAreaView>
     </Modal>
   );

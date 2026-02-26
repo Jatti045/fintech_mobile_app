@@ -70,9 +70,15 @@ export const getTransactions = asyncHandler(
       if (currentMonth !== undefined && currentYear !== undefined) {
         const month = Number(currentMonth);
         const year = Number(currentYear);
-        
+
         // Validate that month and year are valid numbers
-        if (!isNaN(month) && !isNaN(year) && month >= 0 && month <= 11 && year > 0) {
+        if (
+          !isNaN(month) &&
+          !isNaN(year) &&
+          month >= 0 &&
+          month <= 11 &&
+          year > 0
+        ) {
           where.date = {
             gte: new Date(year, month, 1),
             lt: new Date(year, month + 1, 1),
@@ -179,7 +185,7 @@ export const getTransactions = asyncHandler(
       const hasPrevPage = pageNum > 1;
 
       logger.info(
-        `Retrieved ${transaction.length} transactions for user ${userId}, page ${pageNum}/${totalPages}`
+        `Retrieved ${transaction.length} transactions for user ${userId}, page ${pageNum}/${totalPages}`,
       );
 
       res.status(200).json({
@@ -216,7 +222,7 @@ export const getTransactions = asyncHandler(
         error: process.env.NODE_ENV === "development" ? error : undefined,
       });
     }
-  }
+  },
 );
 
 export const createTransaction = asyncHandler(
@@ -246,6 +252,8 @@ export const createTransaction = asyncHandler(
         description,
         budgetId,
         goalId,
+        originalCurrency,
+        originalAmount,
       } = req.body;
 
       // Validation
@@ -332,6 +340,9 @@ export const createTransaction = asyncHandler(
           icon: budgetIcon,
           type,
           amount,
+          originalCurrency: originalCurrency || null,
+          originalAmount:
+            originalAmount != null ? Number(originalAmount) : null,
           description: description?.trim() || null,
           userId,
           budgetId: budgetId && budgetId.trim() !== "" ? budgetId : null,
@@ -381,7 +392,7 @@ export const createTransaction = asyncHandler(
       } */
 
       logger.info(
-        `Transaction created successfully for user ${userId}: ${transaction.id}`
+        `Transaction created successfully for user ${userId}: ${transaction.id}`,
       );
 
       res.status(201).json({
@@ -399,7 +410,7 @@ export const createTransaction = asyncHandler(
         error: process.env.NODE_ENV === "development" ? error : undefined,
       });
     }
-  }
+  },
 );
 
 export const deleteTransaction = asyncHandler(
@@ -462,7 +473,7 @@ export const deleteTransaction = asyncHandler(
                 decrement: existingTransaction.amount,
               },
             },
-          })
+          }),
         );
       }
 
@@ -476,7 +487,7 @@ export const deleteTransaction = asyncHandler(
                 decrement: existingTransaction.amount,
               },
             },
-          })
+          }),
         );
       }
 
@@ -529,7 +540,7 @@ export const deleteTransaction = asyncHandler(
         error: process.env.NODE_ENV === "development" ? error : undefined,
       });
     }
-  }
+  },
 );
 
 export const updateTransaction = asyncHandler(
@@ -663,7 +674,7 @@ export const updateTransaction = asyncHandler(
             prisma.budget.update({
               where: { id: oldBudgetId },
               data: { spent: { decrement: oldAmount } },
-            })
+            }),
           );
         } else if (oldBudgetId === newBudgetId && newType === "EXPENSE") {
           // Same budget still used as expense -> adjust by diff
@@ -673,14 +684,14 @@ export const updateTransaction = asyncHandler(
               prisma.budget.update({
                 where: { id: oldBudgetId },
                 data: { spent: { increment: diff } },
-              })
+              }),
             );
           } else if (diff < 0) {
             ops.push(
               prisma.budget.update({
                 where: { id: oldBudgetId },
                 data: { spent: { decrement: Math.abs(diff) } },
-              })
+              }),
             );
           }
         }
@@ -693,7 +704,7 @@ export const updateTransaction = asyncHandler(
             prisma.budget.update({
               where: { id: newBudgetId },
               data: { spent: { increment: newAmount } },
-            })
+            }),
           );
         }
         // else handled above for diff
@@ -706,7 +717,7 @@ export const updateTransaction = asyncHandler(
             prisma.goal.update({
               where: { id: oldGoalId },
               data: { progress: { decrement: oldAmount } },
-            })
+            }),
           );
         } else if (oldGoalId === newGoalId && newType === "INCOME") {
           const diff = newAmount - oldAmount;
@@ -715,14 +726,14 @@ export const updateTransaction = asyncHandler(
               prisma.goal.update({
                 where: { id: oldGoalId },
                 data: { progress: { increment: diff } },
-              })
+              }),
             );
           } else if (diff < 0) {
             ops.push(
               prisma.goal.update({
                 where: { id: oldGoalId },
                 data: { progress: { decrement: Math.abs(diff) } },
-              })
+              }),
             );
           }
         }
@@ -734,7 +745,7 @@ export const updateTransaction = asyncHandler(
             prisma.goal.update({
               where: { id: newGoalId },
               data: { progress: { increment: newAmount } },
-            })
+            }),
           );
         }
       }
@@ -793,5 +804,5 @@ export const updateTransaction = asyncHandler(
         error: process.env.NODE_ENV === "development" ? error : undefined,
       });
     }
-  }
+  },
 );

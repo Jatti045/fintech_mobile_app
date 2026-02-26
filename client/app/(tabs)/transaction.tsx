@@ -166,12 +166,6 @@ const TransactionRow = React.memo(function TransactionRow({
       onLongPress={() => onDelete(tx.id)}
     >
       <View style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
-        <View
-          style={{ backgroundColor: border, padding: 10 }}
-          className="flex justify-center items-center rounded-full"
-        >
-          <Feather name={tx.icon as any} size={24} color={textSecondary} />
-        </View>
         <View style={{ marginLeft: 12, flex: 1, minWidth: 0 }}>
           <Text
             style={{ color: textPrimary, fontWeight: "700" }}

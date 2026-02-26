@@ -11,6 +11,8 @@ import { formatCurrency } from "@/utils/helper";
 import { useThemedAlert } from "@/utils/themedAlert";
 import { useAppDispatch, useCalendar } from "../useRedux";
 import { useTransactionForm } from "./useTransactionForm";
+import { convertCurrency } from "@/utils/currencyConverter";
+import { getCurrencySymbol } from "@/constants/Currencies";
 
 /**
  * Combined hook that owns form state and exposes both create and update handlers.
@@ -31,10 +33,13 @@ export const useTransactionOperations = () => {
     txAmount,
     txDate,
     txSelectedCategoryAndId,
+    txCurrency,
+    userCurrency,
     setTxName,
     setTxAmount,
     setTxDate,
     setTxSelectedCategoryAndId,
+    setTxCurrency,
   } = form;
 
   /**
@@ -54,9 +59,30 @@ export const useTransactionOperations = () => {
       if (isNaN(amt) || amt <= 0 || amt > MAX_TRANSACTION_AMOUNT) {
         showAlert({
           title: "Invalid Amount",
-          message: `Amount must be between $0.01 and ${formatCurrency(MAX_TRANSACTION_AMOUNT)}.`,
+          message: `Amount must be between ${getCurrencySymbol(txCurrency)}0.01 and ${formatCurrency(MAX_TRANSACTION_AMOUNT, userCurrency)}.`,
         });
         return;
+      }
+
+      // Convert amount if the transaction currency differs from the user's default
+      let finalAmount = amt;
+      let originalCurrency: string | null = null;
+      let originalAmount: number | null = null;
+
+      if (txCurrency !== userCurrency) {
+        try {
+          finalAmount = await convertCurrency(amt, txCurrency, userCurrency);
+          originalCurrency = txCurrency;
+          originalAmount = amt;
+        } catch (err: any) {
+          showAlert({
+            title: "Conversion Error",
+            message:
+              err.message ||
+              `Failed to convert from ${txCurrency} to ${userCurrency}. Please try again.`,
+          });
+          return;
+        }
       }
 
       const payload: any = {
@@ -66,9 +92,11 @@ export const useTransactionOperations = () => {
         date: txDate.toISOString(),
         category: txSelectedCategoryAndId.name || "Uncategorized",
         type: TransactionType.EXPENSE,
-        amount: amt,
+        amount: finalAmount,
         icon: null,
         budgetId: txSelectedCategoryAndId.id || null,
+        originalCurrency,
+        originalAmount,
       };
 
       // Close modal first so any loader overlay is visible
@@ -84,6 +112,7 @@ export const useTransactionOperations = () => {
           setTxAmount("");
           setTxSelectedCategoryAndId({ id: "", name: "" });
           setTxDate(new Date());
+          setTxCurrency(userCurrency);
           dispatch(
             fetchTransaction({
               searchQuery: "",
@@ -111,10 +140,13 @@ export const useTransactionOperations = () => {
       txAmount,
       txDate,
       txSelectedCategoryAndId,
+      txCurrency,
+      userCurrency,
       setTxName,
       setTxAmount,
       setTxDate,
       setTxSelectedCategoryAndId,
+      setTxCurrency,
       showAlert,
       calendar,
       dispatch,

@@ -2,143 +2,142 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 
 const dark = {
-  // Background layers
-  background: "#1E1E1E", // Dark gray, similar to the app background
-  surface: "#282828", // Slightly lighter dark gray for containers
-  surfaceHover: "#3C3C3C", // Hover state for interactive surfaces
+  // Background layers — true black with depth
+  background: "#080808", // Absolute near-black, luxe base
+  surface: "#111111", // Slightly lifted dark surface
+  surfaceHover: "#1C1C1C", // Subtle card/interactive lift
 
-  // Primary brand colors (purple/pink neon vibes)
-  // The login button uses a gradient, so these are the start and end points
-  primary: "#9B5DE5", // Vibrant purple
-  primaryHover: "#7A3CC1", // Deeper purple for hover state
-  secondary: "#F15BB5", // Neon pink accent
+  // Primary brand colors — Champagne Gold (timeless VIP)
+  primary: "#D4AF6A", // Champagne gold, refined & warm
+  primaryHover: "#B8942F", // Deeper antique gold on press
+  secondary: "#F0D9A0", // Pale gold shimmer for accents
 
   // Text colors
-  textPrimary: "#FFFFFF", // Pure white for titles and primary text
-  textSecondary: "#B4B4B4", // Lighter gray for secondary text like the welcome message
-  textDisabled: "#6C6C6C", // Dimmed gray for disabled/inactive text
+  textPrimary: "#F7F3EC", // Warm cream white, feels premium
+  textSecondary: "#9E9585", // Muted warm greige
+  textDisabled: "#4A4540", // Dimmed warm shadow
 
   // Feedback colors
-  success: "#4ADE80", // Green for positive states
-  danger: "#F87171", // Red for errors/alerts
-  warning: "#FBBF24", // Amber for warnings
+  success: "#4CAF82", // Muted emerald
+  danger: "#E05555", // Deep muted red
+  warning: "#D4A03A", // Gold-amber
 
   // UI elements
-  border: "#333333", // Subtle border for inputs and sections
-  inputBackground: "#282828", // Dark input field background, matching the surface
-  placeholderText: "#8A8F9E", // Muted gray for placeholders
+  border: "#222018", // Near-black warm border
+  inputBackground: "#111111", // Matches surface
+  placeholderText: "#5E5A52", // Warm dim placeholder
 
   // Chart accents
-  chart1: "#9B5DE5", // Purple
-  chart2: "#F15BB5", // Pink
-  chart3: "#00BBF9", // Aqua
-  chart4: "#00F5D4", // Teal
+  chart1: "#D4AF6A", // Champagne gold
+  chart2: "#F0D9A0", // Pale gold
+  chart3: "#7BAECF", // Cool steel blue contrast
+  chart4: "#4CAF82", // Emerald
 };
 
 const light = {
-  // Background layers
-  background: "#FFFFFF", // Pure white for a clean light base
-  surface: "#F0F0F0", // Light gray for cards/containers
-  surfaceHover: "#E0E0E0", // Hover state for interactive surfaces
+  // Background layers — warm ivory, pairs naturally with champagne gold
+  background: "#FAFAF7", // Warm off-white canvas
+  surface: "#F2EFE8", // Soft parchment for cards
+  surfaceHover: "#E8E4DB", // Warmer hover lift
 
-  // Primary brand colors (purple/pink neon vibes - kept vibrant for brand consistency)
-  primary: "#9B5DE5", // Vibrant purple for key actions
-  primaryHover: "#7A3CC1", // Slightly deeper purple on hover
-  secondary: "#F15BB5", // Neon pink accent for highlights
+  // Primary brand colors — Gold, carries VIP brand across both themes
+  primary: "#B8942F", // Deep warm gold, legible on light
+  primaryHover: "#9E7D24", // Richer gold on press
+  secondary: "#C8A84B", // Champagne tone accent
 
   // Text colors
-  textPrimary: "#1A1A1A", // Very dark gray for strong contrast on light background
-  textSecondary: "#555555", // Medium gray for secondary text
-  textDisabled: "#AAAAAA", // Light gray for disabled/inactive text
+  textPrimary: "#16130D", // Warm near-black, high contrast
+  textSecondary: "#5C5549", // Warm charcoal for secondary
+  textDisabled: "#A89E90", // Soft warm gray for inactive
 
   // Feedback colors
-  success: "#28A745", // Standard green for positive states
-  danger: "#DC3545", // Standard red for errors/alerts
-  warning: "#FFC107", // Standard amber for warnings
+  success: "#2E7D52", // Deep muted green
+  danger: "#B84040", // Deep muted red
+  warning: "#B8800A", // Dark gold-amber
 
   // UI elements
-  border: "#CCCCCC", // Light gray border between sections
-  inputBackground: "#F8F8F8", // Very light gray input field background
-  placeholderText: "#888888", // Medium gray for placeholders
-
-  // Chart accents (can be adjusted for better visibility on light background if needed)
-  chart1: "#9B5DE5", // Purple
-  chart2: "#F15BB5", // Pink
-  chart3: "#00BBF9", // Aqua
-  chart4: "#00F5D4", // Teal
-};
-
-const forest = {
-  // Background layers
-  background: "#E9F5EC", // Very light mint green
-  surface: "#CDE8D5", // Soft pale green for containers
-  surfaceHover: "#B7DCC4", // Slightly deeper green on hover
-
-  // Primary brand colors (gentle greens)
-  primary: "#6BAF85", // Soft muted green
-  primaryHover: "#5A9E74", // Slightly darker for hover
-  secondary: "#A5D6A7", // Pastel leaf green accent
-
-  // Text colors
-  textPrimary: "#1E293B", // Dark gray-blue for natural contrast
-  textSecondary: "#4B5563", // Softer medium gray
-  textDisabled: "#9CA3AF", // Muted gray for inactive
-
-  // Feedback colors (toned down)
-  success: "#81C784", // Soft green
-  danger: "#C62828", // Gentle coral red
-  warning: "#FFB74D", // Warm, muted orange
-
-  // UI elements
-  border: "#A7CBB7", // Pale sage border
-  inputBackground: "#DDEEE3", // Soft greenish white for inputs
-  placeholderText: "#94A3B8", // Cool muted gray
+  border: "#DED9D0", // Warm parchment border
+  inputBackground: "#F5F2EB", // Cream input field
+  placeholderText: "#9A9080", // Muted warm placeholder
 
   // Chart accents
-  chart1: "#6BAF85", // Soft green
-  chart2: "#A5D6A7", // Pastel green
-  chart3: "#90CAF9", // Soft sky blue
-  chart4: "#FFD54F", // Muted sunlight yellow
+  chart1: "#B8942F", // Deep gold
+  chart2: "#C8A84B", // Champagne
+  chart3: "#4A8AB5", // Muted steel blue contrast
+  chart4: "#2E7D52", // Muted emerald
 };
 
-const coffee = {
-  // Background layers
-  background: "#F8F5F2", // Light cream
-  surface: "#E6DCD3", // Soft latte beige
-  surfaceHover: "#DCCFC3", // Slightly warmer hover
+const ocean = {
+  // Background layers — deep navy abyss
+  background: "#020C18", // Near-black navy
+  surface: "#071729", // Deep ocean surface
+  surfaceHover: "#0D2540", // Lighter deep navy hover
 
-  // Primary brand colors (warm muted browns)
-  primary: "#B08968", // Soft caramel brown
-  primaryHover: "#9C7659", // Slightly darker roast
-  secondary: "#D2B48C", // Tan / cappuccino foam accent
+  // Primary brand colors — Sky / Cyan (crisp ocean accent)
+  primary: "#0EA5E9", // Sky-500, iconic and vibrant
+  primaryHover: "#0284C7", // Sky-600
+  secondary: "#22D3EE", // Cyan-400, electric teal complement
 
   // Text colors
-  textPrimary: "#3E2C23", // Dark espresso brown
-  textSecondary: "#6B4F3B", // Muted warm brown
-  textDisabled: "#A88F7C", // Soft taupe for inactive
+  textPrimary: "#E0F2FE", // Sky-100, cool near-white
+  textSecondary: "#94A3B8", // Slate-400, clean muted blue-gray
+  textDisabled: "#334155", // Slate-700
 
-  // Feedback colors (softer but still distinct)
-  success: "#A5D6A7", // Pastel green
-  danger: "#FF6F6F", // Muted rose red
-  warning: "#FFCC80", // Light warm orange
+  // Feedback colors
+  success: "#34D399", // Emerald-400
+  danger: "#F87171", // Red-400
+  warning: "#FCD34D", // Amber-300
 
   // UI elements
-  border: "#CBB8A9", // Soft mocha border
-  inputBackground: "#F1E8E1", // Pale latte beige
-  placeholderText: "#9E8E7A", // Muted cocoa gray
+  border: "#0F2540", // Deep navy border
+  inputBackground: "#071729", // Matches surface
+  placeholderText: "#475569", // Slate-600
 
   // Chart accents
-  chart1: "#B08968", // Caramel
-  chart2: "#D2B48C", // Cappuccino
-  chart3: "#E6CCB2", // Latte foam beige
-  chart4: "#A1887F", // Mocha gray-brown
+  chart1: "#0EA5E9", // Sky blue
+  chart2: "#22D3EE", // Cyan
+  chart3: "#34D399", // Emerald
+  chart4: "#A78BFA", // Violet accent
+};
+
+const rose = {
+  // Background layers — Rose Pine inspired deep plum-dark
+  background: "#191724", // Deep plum-black base
+  surface: "#1F1D2E", // Dark mauve surface
+  surfaceHover: "#26233A", // Soft purple hover lift
+
+  // Primary brand colors — Rose / Iris (warm & dreamy)
+  primary: "#EB6F92", // Rose, warm vibrant pink
+  primaryHover: "#D4567B", // Deeper rose on press
+  secondary: "#C4A7E7", // Iris, soft lilac complement
+
+  // Text colors
+  textPrimary: "#E0DEF4", // Warm lavender-white
+  textSecondary: "#908CAA", // Muted cool purple-gray
+  textDisabled: "#403D52", // Dimmed deep muted purple
+
+  // Feedback colors
+  success: "#9CCFD8", // Foam teal, gentle and fresh
+  danger: "#EB6F92", // Rose red
+  warning: "#F6C177", // Warm gold
+
+  // UI elements
+  border: "#26233A", // Subtle plum border
+  inputBackground: "#1F1D2E", // Matches surface
+  placeholderText: "#6E6A86", // Muted purple-gray
+
+  // Chart accents
+  chart1: "#EB6F92", // Rose
+  chart2: "#C4A7E7", // Iris
+  chart3: "#9CCFD8", // Foam teal
+  chart4: "#F6C177", // Gold
 };
 
 const theme = {
   DARK: dark,
   LIGHT: light,
-  FOREST: forest,
-  COFFEE: coffee,
+  OCEAN: ocean,
+  ROSE: rose,
 };
 
 interface ITheme {
@@ -191,8 +190,9 @@ const themeSlice = createSlice({
   initialState,
   reducers: {
     setTheme: (state, action) => {
+      const key = action.payload.toUpperCase() as keyof typeof theme;
       state.selectedTheme = action.payload;
-      state.THEME = theme[action.payload.toUpperCase() as keyof typeof theme];
+      state.THEME = theme[key] ?? theme.LIGHT;
     },
   },
   extraReducers: (builder) => {
@@ -204,8 +204,9 @@ const themeSlice = createSlice({
           state.THEME = theme.LIGHT;
           return;
         }
-        state.selectedTheme = storedTheme || "Light";
-        state.THEME = theme[storedTheme.toUpperCase() as keyof typeof theme];
+        const key = storedTheme.toUpperCase() as keyof typeof theme;
+        state.selectedTheme = theme[key] ? storedTheme : "Light";
+        state.THEME = theme[key] ?? theme.LIGHT;
       })
       .addCase(loadThemeFromStorage.rejected, (state, action) => {
         console.error("Failed to load theme from storage:", action.error);
