@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
+  FlatList,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -21,6 +22,7 @@ import {
   uploadProfilePicture,
   deleteProfilePicture,
   changePassword,
+  updateUserCurrency,
 } from "@/store/slices/userSlice";
 import ModalCloseButton from "@/components/modalCloseButton";
 import { router } from "expo-router";
@@ -29,6 +31,12 @@ import { useTheme } from "@/hooks/useRedux";
 import { setTheme } from "@/store/slices/themeSlice";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useThemedAlert } from "@/utils/themedAlert";
+import {
+  CURRENCIES,
+  getCurrencyByCode,
+  DEFAULT_CURRENCY,
+} from "@/constants/Currencies";
+import { clearRatesCache } from "@/utils/currencyConverter";
 
 export default function ProfileScreen() {
   const [uploading, setUploading] = useState(false);
@@ -65,6 +73,7 @@ export default function ProfileScreen() {
   ];
 
   const [changeOpen, setChangeOpen] = useState(false);
+  const [currencyPickerOpen, setCurrencyPickerOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -409,10 +418,10 @@ export default function ProfileScreen() {
               }}
             >
               {[
-                { name: "Light", color: "#E0E0E0", icon: "sunny-outline" },
-                { name: "Dark", color: "#778899", icon: "moon-outline" },
-                { name: "Forest", color: "#8FBC8F", icon: "leaf-outline" },
-                { name: "Coffee", color: "#A48275", icon: "cafe-outline" },
+                { name: "Light", color: "#B8942F", icon: "sunny-outline" },
+                { name: "Dark", color: "#D4AF6A", icon: "moon-outline" },
+                { name: "Ocean", color: "#0EA5E9", icon: "water-outline" },
+                { name: "Rose", color: "#EB6F92", icon: "rose-outline" },
               ].map((themeOption) => (
                 <TouchableOpacity
                   key={themeOption.name}
@@ -480,6 +489,53 @@ export default function ProfileScreen() {
               ))}
             </View>
           </View>
+
+          {/* Currency Selector */}
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => setCurrencyPickerOpen(true)}
+            style={{ backgroundColor: THEME.surface }}
+            className="p-4 rounded-xl mb-3"
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <View>
+                <Text
+                  style={{ color: THEME.textPrimary }}
+                  className="font-medium text-base mb-1"
+                >
+                  Default Currency
+                </Text>
+                <View
+                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+                >
+                  <Text style={{ fontSize: 18 }}>
+                    {
+                      getCurrencyByCode(user?.currency || DEFAULT_CURRENCY)
+                        ?.flag
+                    }
+                  </Text>
+                  <Text style={{ color: THEME.textSecondary }}>
+                    {user?.currency || DEFAULT_CURRENCY} —{" "}
+                    {
+                      getCurrencyByCode(user?.currency || DEFAULT_CURRENCY)
+                        ?.name
+                    }
+                  </Text>
+                </View>
+              </View>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={THEME.textSecondary}
+              />
+            </View>
+          </TouchableOpacity>
 
           {/* Other Settings */}
           {settingsItems.map((item, index) => (
@@ -677,6 +733,152 @@ export default function ProfileScreen() {
       {/* Full-screen loading overlay during upload */}
       {uploading && <Loader msg="Uploading..." />}
       {deleting && <Loader msg="Deleting..." />}
+
+      {/* Currency Picker Modal */}
+      {currencyPickerOpen && (
+        <Modal
+          visible={currencyPickerOpen}
+          animationType="slide"
+          transparent={true}
+        >
+          <View
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0,0,0,0.5)",
+              justifyContent: "flex-end",
+            }}
+          >
+            <View
+              style={{
+                backgroundColor: THEME.background,
+                borderTopLeftRadius: 20,
+                borderTopRightRadius: 20,
+                maxHeight: "70%",
+                paddingBottom: 30,
+              }}
+            >
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: 16,
+                  borderBottomWidth: 1,
+                  borderBottomColor: THEME.border,
+                }}
+              >
+                <Text
+                  style={{
+                    color: THEME.textPrimary,
+                    fontSize: 18,
+                    fontWeight: "700",
+                  }}
+                >
+                  Select Default Currency
+                </Text>
+                <TouchableOpacity onPress={() => setCurrencyPickerOpen(false)}>
+                  <Ionicons name="close" size={24} color={THEME.textPrimary} />
+                </TouchableOpacity>
+              </View>
+
+              <FlatList
+                data={CURRENCIES}
+                keyExtractor={(item) => item.code}
+                renderItem={({ item }) => {
+                  const isSelected =
+                    item.code === (user?.currency || DEFAULT_CURRENCY);
+                  return (
+                    <TouchableOpacity
+                      onPress={async () => {
+                        if (isSelected) {
+                          setCurrencyPickerOpen(false);
+                          return;
+                        }
+                        setCurrencyPickerOpen(false);
+                        try {
+                          const result = await dispatch(
+                            updateUserCurrency(item.code),
+                          );
+                          if (updateUserCurrency.fulfilled.match(result)) {
+                            clearRatesCache();
+                            showAlert({
+                              title: "Currency Updated",
+                              message: `Default currency changed to ${item.code} (${item.name})`,
+                            });
+                          } else {
+                            showAlert({
+                              title: "Error",
+                              message:
+                                (result.payload as string) ||
+                                "Failed to update currency",
+                            });
+                          }
+                        } catch (e: any) {
+                          showAlert({
+                            title: "Error",
+                            message: e?.message || "Failed to update currency",
+                          });
+                        }
+                      }}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        padding: 14,
+                        paddingHorizontal: 20,
+                        backgroundColor: isSelected
+                          ? THEME.primary + "20"
+                          : "transparent",
+                        borderBottomWidth: 0.5,
+                        borderBottomColor: THEME.border,
+                      }}
+                    >
+                      <Text style={{ fontSize: 22, marginRight: 12 }}>
+                        {item.flag}
+                      </Text>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={{
+                            color: THEME.textPrimary,
+                            fontWeight: isSelected ? "700" : "500",
+                            fontSize: 15,
+                          }}
+                        >
+                          {item.code}{" "}
+                          <Text
+                            style={{
+                              color: THEME.textSecondary,
+                              fontWeight: "400",
+                            }}
+                          >
+                            — {item.name}
+                          </Text>
+                        </Text>
+                      </View>
+                      <Text
+                        style={{
+                          color: THEME.textSecondary,
+                          fontSize: 16,
+                          fontWeight: "600",
+                        }}
+                      >
+                        {item.symbol}
+                      </Text>
+                      {isSelected && (
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={20}
+                          color={THEME.primary}
+                          style={{ marginLeft: 8 }}
+                        />
+                      )}
+                    </TouchableOpacity>
+                  );
+                }}
+              />
+            </View>
+          </View>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }

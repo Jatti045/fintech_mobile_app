@@ -20,7 +20,7 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.budgee.finance",
-      "versionCode": 13,
+      "versionCode": 16,
       "permissions": ["INTERNET", "ACCESS_NETWORK_STATE", "CAMERA"],
       "blockedPermissions": ["RECORD_AUDIO"]
     },

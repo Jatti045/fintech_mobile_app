@@ -35,6 +35,8 @@ export function formatDate(dateString: string): string {
   });
 }
 
+import { getCurrencySymbol } from "@/constants/Currencies";
+
 // Number formatter without currency symbol (two decimals)
 export const formatNumber = (n: number) =>
   new Intl.NumberFormat(undefined, {
@@ -42,5 +44,8 @@ export const formatNumber = (n: number) =>
     minimumFractionDigits: 2,
   }).format(n);
 
-// Currency formatter that uses a simple dollar symbol
-export const formatCurrency = (n: number) => `$${formatNumber(Number(n || 0))}`;
+// Currency formatter that uses the given currency code (defaults to USD)
+export const formatCurrency = (n: number, currencyCode?: string) => {
+  const symbol = getCurrencySymbol(currencyCode || "USD");
+  return `${symbol}${formatNumber(Number(n || 0))}`;
+};

@@ -22,6 +22,7 @@ export interface IUser {
   username: String;
   email: string;
   profilePic?: string | null;
+  currency?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -37,7 +38,7 @@ export interface IAuthResponse {
 
 class UserAPI extends BaseAPI {
   async login(
-    credentials: ILoginData
+    credentials: ILoginData,
   ): Promise<IApiResponse<{ user: IUser; token: string }>> {
     try {
       const response = await this.makeRequest<{ user: IUser; token: string }>(
@@ -45,13 +46,13 @@ class UserAPI extends BaseAPI {
         {
           method: "POST",
           data: credentials,
-        }
+        },
       );
 
       await AsyncStorage.setItem("authToken", response.data.token);
       await AsyncStorage.setItem(
         "userData",
-        JSON.stringify(response.data.user)
+        JSON.stringify(response.data.user),
       );
 
       return response;
@@ -87,7 +88,7 @@ class UserAPI extends BaseAPI {
           const keysToRemove = allKeys.filter(
             (k) =>
               k.startsWith(`transactions:${userId}:`) ||
-              k.startsWith(`budgets:${userId}:`)
+              k.startsWith(`budgets:${userId}:`),
           );
           if (keysToRemove.length > 0)
             await AsyncStorage.multiRemove(keysToRemove);
@@ -115,7 +116,7 @@ class UserAPI extends BaseAPI {
         const keysToRemove = allKeys.filter(
           (k) =>
             k.startsWith(`transactions:${userId}:`) ||
-            k.startsWith(`budgets:${userId}:`)
+            k.startsWith(`budgets:${userId}:`),
         );
         if (keysToRemove.length > 0)
           await AsyncStorage.multiRemove(keysToRemove);
@@ -133,7 +134,7 @@ class UserAPI extends BaseAPI {
 
   async uploadProfilePictureById(
     userId: string,
-    imageFile: any
+    imageFile: any,
   ): Promise<IApiResponse<IUser>> {
     try {
       const formData = new FormData();
@@ -147,7 +148,7 @@ class UserAPI extends BaseAPI {
           headers: {
             "Content-Type": "multipart/form-data",
           },
-        }
+        },
       );
 
       console.log("Upload response:", response.data);
@@ -158,7 +159,7 @@ class UserAPI extends BaseAPI {
       if (response?.data?.data) {
         await AsyncStorage.setItem(
           "userData",
-          JSON.stringify(response.data.data)
+          JSON.stringify(response.data.data),
         );
       } else {
         console.error("Upload response missing user object", response?.data);
@@ -177,7 +178,7 @@ class UserAPI extends BaseAPI {
         `/user/${userId}/profile-picture`,
         {
           method: "DELETE",
-        }
+        },
       );
 
       // Update stored user if returned
@@ -241,6 +242,29 @@ class UserAPI extends BaseAPI {
       return response;
     } catch (error: any) {
       console.error("Reset password failed:", error.message);
+      throw error;
+    }
+  }
+
+  async updateCurrency(currency: string): Promise<IApiResponse<IUser>> {
+    try {
+      const response = await this.makeRequest<IUser>("/user/currency", {
+        method: "PUT",
+        data: { currency },
+      });
+
+      // Update stored user with new currency
+      if (response?.data) {
+        try {
+          await AsyncStorage.setItem("userData", JSON.stringify(response.data));
+        } catch (e) {
+          // ignore storage errors
+        }
+      }
+
+      return response;
+    } catch (error: any) {
+      console.error("Update currency failed:", error.message);
       throw error;
     }
   }

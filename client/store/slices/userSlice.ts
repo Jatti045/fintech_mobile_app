@@ -38,7 +38,7 @@ export const loginUser = createAsyncThunk(
         "Login failed";
       return rejectWithValue(msg);
     }
-  }
+  },
 );
 
 export const signupUser = createAsyncThunk(
@@ -54,7 +54,7 @@ export const signupUser = createAsyncThunk(
         "Signup failed";
       return rejectWithValue(msg);
     }
-  }
+  },
 );
 
 export const logoutUser = createAsyncThunk(
@@ -65,7 +65,7 @@ export const logoutUser = createAsyncThunk(
     } catch (error: any) {
       return rejectWithValue(error.message || "Logout failed");
     }
-  }
+  },
 );
 
 export const deleteUserAccount = createAsyncThunk(
@@ -77,7 +77,7 @@ export const deleteUserAccount = createAsyncThunk(
     } catch (error: any) {
       return rejectWithValue(error.message || "Account deletion failed");
     }
-  }
+  },
 );
 
 export const loadUserFromStorage = createAsyncThunk(
@@ -98,28 +98,28 @@ export const loadUserFromStorage = createAsyncThunk(
     } catch (error: any) {
       return rejectWithValue(error.message || "Failed to load user data");
     }
-  }
+  },
 );
 
 export const uploadProfilePicture = createAsyncThunk(
   "user/uploadProfilePicture",
   async (
     { userId, imageFile }: { userId: string; imageFile: any },
-    { rejectWithValue }
+    { rejectWithValue },
   ) => {
     try {
       const response = await userAPI.uploadProfilePictureById(
         userId,
-        imageFile
+        imageFile,
       );
 
       return response.data;
     } catch (error: any) {
       return rejectWithValue(
-        error.message || "Failed to upload profile picture"
+        error.message || "Failed to upload profile picture",
       );
     }
-  }
+  },
 );
 
 export const deleteProfilePicture = createAsyncThunk(
@@ -130,10 +130,10 @@ export const deleteProfilePicture = createAsyncThunk(
       return response.data;
     } catch (error: any) {
       return rejectWithValue(
-        error.message || "Failed to delete profile picture"
+        error.message || "Failed to delete profile picture",
       );
     }
-  }
+  },
 );
 
 export const changePassword = createAsyncThunk(
@@ -144,7 +144,7 @@ export const changePassword = createAsyncThunk(
       newPassword: string;
       confirmPassword: string;
     },
-    { rejectWithValue }
+    { rejectWithValue },
   ) => {
     try {
       const response = await userAPI.changePassword(payload);
@@ -156,7 +156,23 @@ export const changePassword = createAsyncThunk(
         "Change password failed";
       return rejectWithValue(msg);
     }
-  }
+  },
+);
+
+export const updateUserCurrency = createAsyncThunk(
+  "user/updateCurrency",
+  async (currency: string, { rejectWithValue }) => {
+    try {
+      const response = await userAPI.updateCurrency(currency);
+      return response.data;
+    } catch (error: any) {
+      const msg =
+        (error && error.message) ||
+        (error && error.data && error.data.message) ||
+        "Failed to update currency";
+      return rejectWithValue(msg);
+    }
+  },
 );
 
 export const forgotPassword = createAsyncThunk(
@@ -172,7 +188,7 @@ export const forgotPassword = createAsyncThunk(
         "Forgot password failed";
       return rejectWithValue(msg);
     }
-  }
+  },
 );
 
 export const resetPassword = createAsyncThunk(
@@ -185,7 +201,7 @@ export const resetPassword = createAsyncThunk(
       confirmPassword?: string;
       verifyOnly?: boolean;
     },
-    { rejectWithValue }
+    { rejectWithValue },
   ) => {
     try {
       const response = await userAPI.resetPassword(payload);
@@ -197,7 +213,7 @@ export const resetPassword = createAsyncThunk(
         "Reset password failed";
       return rejectWithValue(msg);
     }
-  }
+  },
 );
 
 // Create the slice
@@ -371,6 +387,24 @@ const userSlice = createSlice({
       })
       .addCase(changePassword.rejected, (state, action) => {
         state.isLoading = false;
+        state.error = action.payload as string;
+      });
+
+    // updateUserCurrency cases
+    builder
+      .addCase(updateUserCurrency.pending, (state) => {
+        state.error = null;
+      })
+      .addCase(updateUserCurrency.fulfilled, (state, action) => {
+        if (state.user && action.payload) {
+          state.user = {
+            ...state.user,
+            currency: (action.payload as any).currency,
+          };
+        }
+        state.error = null;
+      })
+      .addCase(updateUserCurrency.rejected, (state, action) => {
         state.error = action.payload as string;
       });
 
