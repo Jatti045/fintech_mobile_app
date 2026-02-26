@@ -12,6 +12,7 @@
 
 import React, { useEffect, useRef } from "react";
 import { Animated, View, StyleSheet, Easing } from "react-native";
+import { useTheme } from "@/hooks/useRedux";
 
 // ─── Base Skeleton Box ──────────────────────────────────────────────────────
 
@@ -82,23 +83,13 @@ export const SkeletonBox = React.memo(function SkeletonBox({
 
 // ─── Home Screen Skeleton ───────────────────────────────────────────────────
 
-interface HomeSkeletonProps {
-  THEME: {
-    background: string;
-    surface: string;
-    border: string;
-    textSecondary: string;
-  };
-}
-
 /**
  * Full skeleton layout for the Home screen.
  * Shows placeholders for: header, month selector, spent card, quick actions,
  * budget summary, chart, and recent transactions.
  */
-export const HomeSkeleton = React.memo(function HomeSkeleton({
-  THEME,
-}: HomeSkeletonProps) {
+export const HomeSkeleton = React.memo(function HomeSkeleton() {
+  const { THEME } = useTheme();
   const baseColor = THEME.border;
   const highlightColor = THEME.surface;
 
@@ -299,21 +290,12 @@ export const HomeSkeleton = React.memo(function HomeSkeleton({
 
 // ─── Transaction Screen Skeleton ────────────────────────────────────────────
 
-interface TransactionSkeletonProps {
-  THEME: {
-    background: string;
-    surface: string;
-    border: string;
-  };
-}
-
 /**
  * Full skeleton layout for the Transaction screen.
  * Shows placeholders for: search bar, filters, and transaction sections.
  */
-export const TransactionSkeleton = React.memo(function TransactionSkeleton({
-  THEME,
-}: TransactionSkeletonProps) {
+export const TransactionSkeleton = React.memo(function TransactionSkeleton() {
+  const { THEME } = useTheme();
   const baseColor = THEME.border;
   const highlightColor = THEME.surface;
 
@@ -419,21 +401,12 @@ export const TransactionSkeleton = React.memo(function TransactionSkeleton({
 
 // ─── Budget Screen Skeleton ─────────────────────────────────────────────────
 
-interface BudgetSkeletonProps {
-  THEME: {
-    background: string;
-    surface: string;
-    border: string;
-  };
-}
-
 /**
  * Full skeleton layout for the Budget screen.
  * Shows placeholders for: title and budget cards with progress bars.
  */
-export const BudgetSkeleton = React.memo(function BudgetSkeleton({
-  THEME,
-}: BudgetSkeletonProps) {
+export const BudgetSkeleton = React.memo(function BudgetSkeleton() {
+  const { THEME } = useTheme();
   const baseColor = THEME.border;
   const highlightColor = THEME.surface;
 

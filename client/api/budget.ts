@@ -1,12 +1,8 @@
-import { IBudget } from "@/store/slices/budgetSlice";
-import BaseAPI, { IApiResponse } from "./base";
+import type { IBudget, IBudgetData } from "@/types/budget/types";
+import BaseAPI from "./base";
+import type { IApiResponse } from "@/types/api/types";
 
-export interface IBudgetData {
-  category: string;
-  limit: number;
-  month: number;
-  year: number;
-}
+export type { IBudgetData };
 
 class BudgetAPI extends BaseAPI {
   async create(budgetData: IBudgetData): Promise<IApiResponse<IBudget>> {
@@ -60,7 +56,7 @@ class BudgetAPI extends BaseAPI {
     budgetId: string,
     updates: Partial<
       IBudgetData & { category?: string; limit?: number; icon?: string }
-    >
+    >,
   ): Promise<IApiResponse<any>> {
     try {
       const response = await this.makeRequest<any>(`/budget/${budgetId}`, {

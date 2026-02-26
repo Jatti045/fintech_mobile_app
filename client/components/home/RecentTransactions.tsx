@@ -1,9 +1,9 @@
 import React from "react";
 import { View, Text } from "react-native";
 import { formatCurrency } from "@/utils/helper";
+import { useTheme } from "@/hooks/useRedux";
 
 type Props = {
-  THEME: any;
   /** Pre-sorted, pre-sliced list of recent transactions to display. */
   transactions: any[];
 };
@@ -12,7 +12,8 @@ type Props = {
  * Scrollable list of recent transactions showing name, category, date, and
  * amount. Expects the parent to own sorting and slicing.
  */
-export default function RecentTransactions({ THEME, transactions }: Props) {
+export default function RecentTransactions({ transactions }: Props) {
+  const { THEME } = useTheme();
   return (
     <View style={{ marginBottom: 16 }}>
       <Text

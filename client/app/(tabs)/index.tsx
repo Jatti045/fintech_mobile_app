@@ -3,18 +3,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ScrollView, View } from "react-native";
 import { useAppDispatch } from "@/store";
 import { nextMonth, prevMonth } from "@/store/slices/calendarSlice";
-import {
-  useTheme,
-  useTransactions,
-  useBudgets,
-  useCalendar,
-  useTransactionMonthSummary,
-  useTransactionStatus,
-  useBudgetStatus,
-} from "@/hooks/useRedux";
 import { HomeSkeleton } from "@/components/skeleton/SkeletonLoader";
 import { useThemedAlert } from "@/utils/themedAlert";
-import CreateTransactionModal from "@/components/transaction/transactionModal";
+import TransactionModal from "@/components/transaction/TxModal";
 import BudgetModal from "@/components/budget/BudgetModal";
 import InformationModal from "@/components/home/informationModal";
 import { TopCategoriesChart } from "@/components/home/TopCategoriesChart";
@@ -25,6 +16,15 @@ import QuickActions from "@/components/home/QuickActions";
 import BudgetSummary from "@/components/home/BudgetSummary";
 import RecentTransactions from "@/components/home/RecentTransactions";
 import TipOfTheDay from "@/components/home/TipOfTheDay";
+import {
+  useTheme,
+  useTransactions,
+  useBudgets,
+  useCalendar,
+  useTransactionMonthSummary,
+  useTransactionStatus,
+  useBudgetStatus,
+} from "@/hooks/useRedux";
 
 export default function Index() {
   const { THEME } = useTheme();
@@ -47,14 +47,11 @@ export default function Index() {
   const [openTxModal, setOpenTxModal] = useState(false);
   const [openBudgetModal, setOpenBudgetModal] = useState(false);
 
-  // ── Derived state ────────────────────────────────────────────────────────────
-
   const monthStartDate = useMemo(
     () => new Date(calendar.year, calendar.month, 1),
     [calendar.year, calendar.month],
   );
 
-  /** Pre-formatted label passed to MonthSelector to avoid prop-drilling a Date. */
   const monthLabel = useMemo(
     () =>
       `${monthStartDate.toLocaleString(undefined, { month: "long" })} ${calendar.year}`,
@@ -87,31 +84,13 @@ export default function Index() {
     return totals;
   }, [transactions]);
 
-  /** Budgets that belong to the currently selected month/year. */
-  const filteredBudgets = useMemo(
-    () =>
-      budgets.filter((b: any) => {
-        try {
-          const d = new Date(b.createdAt);
-          return (
-            d.getMonth() === calendar.month && d.getFullYear() === calendar.year
-          );
-        } catch {
-          return false;
-        }
-      }),
-    [budgets, calendar.month, calendar.year],
-  );
-
   const now = new Date();
   const isCurrentMonth =
     calendar.month === now.getMonth() && calendar.year === now.getFullYear();
 
-  // ── Handlers ─────────────────────────────────────────────────────────────────
-
-  /** Guard: a budget must exist for the month before a transaction can be added. */
+  /* Guard: a budget must exist for the month before a transaction can be added. */
   const handleNewTransaction = () => {
-    if (filteredBudgets.length === 0) {
+    if (budgets.length === 0) {
       showAlert({
         title: "No budgets available",
         message:
@@ -122,8 +101,6 @@ export default function Index() {
     setOpenTxModal(true);
   };
 
-  // ── Render ───────────────────────────────────────────────────────────────────
-
   // Show skeleton loader during initial data fetch
   if (isInitialLoading) {
     return (
@@ -131,7 +108,7 @@ export default function Index() {
         edges={["left", "right"]}
         style={{ flex: 1, backgroundColor: THEME.background }}
       >
-        <HomeSkeleton THEME={THEME} />
+        <HomeSkeleton />
       </SafeAreaView>
     );
   }
@@ -145,47 +122,44 @@ export default function Index() {
         contentContainerStyle={{ padding: 18 }}
         showsVerticalScrollIndicator={false}
       >
-        <HomeHeader THEME={THEME} onInfoPress={() => setHelpOpen(true)} />
+        {/* Header with title and info button to open help modal */}
+        <HomeHeader onInfoPress={() => setHelpOpen(true)} />
 
+        {/* Month selector with chevron buttons to navigate back and forth */}
         <MonthSelector
-          THEME={THEME}
           monthLabel={monthLabel}
           isCurrentMonth={isCurrentMonth}
           onPrev={() => dispatch(prevMonth())}
           onNext={() => dispatch(nextMonth())}
         />
 
-        <SpentThisMonthCard THEME={THEME} total={expenseTotal} />
+        {/* Card showing total spent this month, with currency-aware formatting */}
+        <SpentThisMonthCard total={expenseTotal} />
 
+        {/* Quick action buttons for adding new transaction or budget */}
         <QuickActions
-          THEME={THEME}
           onNewTransaction={handleNewTransaction}
           onNewBudget={() => setOpenBudgetModal(true)}
         />
 
-        <BudgetSummary THEME={THEME} budgets={filteredBudgets} />
+        {/* Budget summary cards with progress bars for each category */}
+        <BudgetSummary />
 
-        <TopCategoriesChart
-          label="Top Categories"
-          THEME={THEME}
-          totals={categoryTotals}
-          budgets={filteredBudgets}
-        />
+        {/* Chart showing top spending categories for the month, with bars colored by budget ratio */}
+        <TopCategoriesChart label="Top Categories" totals={categoryTotals} />
 
-        <RecentTransactions THEME={THEME} transactions={recentTransactions} />
+        {/* List of 5 most recent transactions across all months */}
+        <RecentTransactions transactions={recentTransactions} />
 
-        <TipOfTheDay THEME={THEME} />
+        {/* Static tip of the day with financial advice */}
+        <TipOfTheDay />
 
-        {/* Bottom padding so the last card clears the tab bar */}
+        {/* Extra spacing at bottom to ensure last item isn't cut off */}
         <View style={{ height: 80 }} />
       </ScrollView>
 
-      {/* Modals ─────────────────────────────────────────────────────────────── */}
-      <CreateTransactionModal
-        openSheet={openTxModal}
-        setOpenSheet={setOpenTxModal}
-        budgets={filteredBudgets}
-      />
+      {/* Modals */}
+      <TransactionModal openSheet={openTxModal} setOpenSheet={setOpenTxModal} />
       <BudgetModal
         openSheet={openBudgetModal}
         setOpenSheet={setOpenBudgetModal}

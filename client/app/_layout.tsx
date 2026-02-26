@@ -6,15 +6,12 @@ import { useEffect } from "react";
 import { useAppDispatch, useCalendar, useTheme } from "@/hooks/useRedux";
 import { ActivityIndicator, View, Text } from "react-native";
 import { loadThemeFromStorage } from "@/store/slices/themeSlice";
-import { fetchTransaction } from "@/store/slices/transactionSlice";
-import { fetchBudgets } from "@/store/slices/budgetSlice";
 import { AlertProvider } from "@/utils/themedAlert";
 
 function AppRoutes() {
   const dispatch = useAppDispatch();
   const { THEME } = useTheme();
   const { isAuthenticated, isLoading } = useAuth();
-  const { month, year } = useCalendar();
 
   function SplashScreen() {
     return (
@@ -27,16 +24,6 @@ function AppRoutes() {
         }}
       >
         <ActivityIndicator size="large" color={THEME.primary} />
-        {/* <Text
-        style={{
-          marginTop: 16,
-          fontSize: 18,
-          fontWeight: "600",
-          color: THEME.textPrimary,
-        }}
-      >
-        Loading...
-      </Text> */}
       </View>
     );
   }

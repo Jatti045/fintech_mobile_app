@@ -1,15 +1,13 @@
 import React from "react";
 import { View, Text } from "react-native";
-
-type Props = {
-  THEME: any;
-};
+import { useTheme } from "@/hooks/useRedux";
 
 /**
  * Static educational tip shown at the bottom of the home feed.
  * Replace the message prop with a dynamic tips array in the future.
  */
-export default function TipOfTheDay({ THEME }: Props) {
+export default function TipOfTheDay() {
+  const { THEME } = useTheme();
   return (
     <View
       style={{

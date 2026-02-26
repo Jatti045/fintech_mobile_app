@@ -1,17 +1,18 @@
 import React from "react";
 import { View, Text, TouchableOpacity } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import BudgeeLogo from "@/components/budgeeLogo";
+import BudgeeLogo from "./budgeeLogo";
+import { useTheme } from "@/hooks/useRedux";
 
 type Props = {
-  THEME: any;
   onInfoPress: () => void;
 };
 
-/**
- * Persistent top bar: app logo/wordmark on the left, info button on the right.
- */
-export default function HomeHeader({ THEME, onInfoPress }: Props) {
+{
+  /*Persistent top bar: app logo on the left, info button on the right.*/
+}
+export default function HomeHeader({ onInfoPress }: Props) {
+  const { THEME } = useTheme();
   return (
     <View
       style={{

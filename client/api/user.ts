@@ -2,39 +2,15 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import apiClient from "../config/apiClient";
 import { AxiosRequestConfig } from "axios";
 import BaseAPI from "./base";
-import { IApiResponse } from "./base";
+import type { IApiResponse } from "@/types/api/types";
+import {
+  type ILoginData,
+  type ISignupData,
+  type IUser,
+  type IAuthResponse,
+} from "@/types/user/types";
 
-// Types
-export interface ILoginData {
-  email: string;
-  password: string;
-}
-
-export interface ISignupData {
-  username: string;
-  email: string;
-  password: string;
-  confirmPassword: string;
-}
-
-export interface IUser {
-  id: string;
-  username: String;
-  email: string;
-  profilePic?: string | null;
-  currency?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export interface IAuthResponse {
-  success: boolean;
-  message: string;
-  data: {
-    user: IUser;
-    token: string;
-  };
-}
+export type { ILoginData, ISignupData, IUser, IAuthResponse };
 
 class UserAPI extends BaseAPI {
   async login(

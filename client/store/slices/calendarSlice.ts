@@ -1,9 +1,7 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+import type { CalendarState } from "@/types/calendar/types";
 
-export interface CalendarState {
-  month: number; // 0-11
-  year: number; // full year
-}
+export type { CalendarState };
 
 const now = new Date();
 
@@ -18,7 +16,7 @@ const calendarSlice = createSlice({
   reducers: {
     setMonthYear(
       state,
-      action: PayloadAction<{ month: number; year: number }>
+      action: PayloadAction<{ month: number; year: number }>,
     ) {
       state.month = action.payload.month;
       state.year = action.payload.year;

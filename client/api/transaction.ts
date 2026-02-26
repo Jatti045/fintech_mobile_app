@@ -1,53 +1,19 @@
 import BaseAPI from "./base";
+import {
+  TransactionType,
+  ITransaction,
+  ITransactionPagination,
+  ITransactionFilter,
+  ITransactionResponse,
+} from "@/types/transaction/types";
 
-export enum TransactionType {
-  INCOME = "INCOME",
-  EXPENSE = "EXPENSE",
-}
-
-export interface ITransaction {
-  id?: string;
-  name: string;
-  month: number;
-  year: number;
-  category: string;
-  amount: number;
-  date: string;
-  type: TransactionType;
-  icon?: string;
-  createdAt?: string;
-  updatedAt?: string;
-  budgetId?: string | null;
-  goalId?: string | null;
-}
-
-export interface ITransactionPagination {
-  currentPage: number;
-  totalPages: number;
-  totalCount: number;
-  hasNextPage: boolean;
-  hasPrevPage: boolean;
-  limit: number;
-}
-
-export interface ITransactionFilter {
-  type?: TransactionType;
-  category?: string;
-  startDate?: string;
-  endDate?: string;
-  budgetId?: string;
-  goalId?: string;
-}
-
-export interface ITransactionResponse<T> {
-  success: boolean;
-  message: string;
-  data: {
-    transaction: T;
-    pagination?: ITransactionPagination;
-    filters?: ITransactionFilter;
-  };
-}
+export { TransactionType };
+export type {
+  ITransaction,
+  ITransactionPagination,
+  ITransactionFilter,
+  ITransactionResponse,
+};
 
 class TransactionAPI extends BaseAPI {
   async fetchAll({
@@ -82,7 +48,7 @@ class TransactionAPI extends BaseAPI {
   }
 
   async create(
-    transaction: ITransaction
+    transaction: ITransaction,
   ): Promise<ITransactionResponse<ITransaction>> {
     return this.makeRequest("/transaction", {
       method: "POST",
@@ -92,7 +58,7 @@ class TransactionAPI extends BaseAPI {
 
   async update(
     id: string,
-    updates: Partial<ITransaction>
+    updates: Partial<ITransaction>,
   ): Promise<ITransactionResponse<ITransaction>> {
     return this.makeRequest(`/transaction/${id}`, {
       method: "PUT",

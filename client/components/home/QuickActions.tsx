@@ -1,9 +1,9 @@
 import React from "react";
 import { View, Text, TouchableOpacity } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
+import { useTheme } from "@/hooks/useRedux";
 
 type Props = {
-  THEME: any;
   /** Called after the guard check passes (budget exists for this month). */
   onNewTransaction: () => void;
   onNewBudget: () => void;
@@ -13,11 +13,8 @@ type Props = {
  * Two-button row for the most common actions: add transaction / add budget.
  * The parent is responsible for any guard logic before calling onNewTransaction.
  */
-export default function QuickActions({
-  THEME,
-  onNewTransaction,
-  onNewBudget,
-}: Props) {
+export default function QuickActions({ onNewTransaction, onNewBudget }: Props) {
+  const { THEME } = useTheme();
   return (
     <View>
       <Text

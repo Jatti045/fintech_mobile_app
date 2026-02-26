@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import ModalCloseButton from "../modalCloseButton";
+import ModalCloseButton from "../global/modalCloseButton";
 import { useTheme, useAppDispatch, useAppSelector } from "@/hooks/useRedux";
 import { useThemedAlert } from "@/utils/themedAlert";
 import { resetPassword, selectIsLoading } from "@/store/slices/userSlice";
@@ -82,7 +82,7 @@ function ResetPasswordModal({
     try {
       setIsSubmitting(true);
       const action = await dispatch(
-        resetPassword({ email, otp, newPassword, confirmPassword }) as any
+        resetPassword({ email, otp, newPassword, confirmPassword }) as any,
       ).unwrap();
 
       if (action?.success) {

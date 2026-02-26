@@ -15,7 +15,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useTheme } from "@/hooks/useRedux";
 import { useThemedAlert } from "@/utils/themedAlert";
 import { useState, useRef, useEffect } from "react";
-import ModalCloseButton from "../modalCloseButton";
+import ModalCloseButton from "../global/modalCloseButton";
 import Loader from "@/utils/loader";
 
 function ForgotPasswordModal({
