@@ -24,7 +24,7 @@ import {
   changePassword,
   updateUserCurrency,
 } from "@/store/slices/userSlice";
-import ModalCloseButton from "@/components/modalCloseButton";
+import ModalCloseButton from "@/components/global/modalCloseButton";
 import { router } from "expo-router";
 import Loader from "@/utils/loader";
 import { useTheme } from "@/hooks/useRedux";

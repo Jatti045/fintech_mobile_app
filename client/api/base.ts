@@ -1,16 +1,13 @@
 import apiClient from "../config/apiClient";
 import { AxiosRequestConfig } from "axios";
 
-export interface IApiResponse<T> {
-  success: boolean;
-  message: string;
-  data: T;
-}
+export type { IApiResponse } from "@/types/api/types";
+import type { IApiResponse } from "@/types/api/types";
 
 export default class BaseAPI {
   protected async makeRequest<T>(
     endpoint: string,
-    options: AxiosRequestConfig = {}
+    options: AxiosRequestConfig = {},
   ): Promise<IApiResponse<T>> {
     try {
       const response = await apiClient({

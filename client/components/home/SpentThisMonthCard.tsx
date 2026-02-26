@@ -1,17 +1,19 @@
 import React from "react";
 import { View, Text } from "react-native";
 import { formatNumber } from "@/utils/helper";
+import { useUser } from "@/store";
+import { useTheme } from "@/hooks/useRedux";
 
 type Props = {
-  THEME: any;
-  /** Total amount spent in the selected month (in dollars). */
+  /* Total amount spent in the selected month */
   total: number;
 };
 
-/**
- * Hero card showing total expenditure for the currently selected month.
- */
-export default function SpentThisMonthCard({ THEME, total }: Props) {
+/* Hero card showing total expenditure for the currently selected month. */
+export default function SpentThisMonthCard({ total }: Props) {
+  const { THEME } = useTheme();
+  const user = useUser();
+  const currency = user?.currency || "USD";
   return (
     <View
       style={{
@@ -31,7 +33,7 @@ export default function SpentThisMonthCard({ THEME, total }: Props) {
           fontWeight: "900",
         }}
       >
-        ${formatNumber(total)}
+        ${formatNumber(total)} {currency}
       </Text>
     </View>
   );

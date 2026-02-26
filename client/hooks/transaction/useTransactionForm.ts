@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useCalendar, useAuth } from "../useRedux";
 import { current } from "@reduxjs/toolkit";
-import { TransactionType } from "@/api/transaction";
+import { TransactionType } from "@/types/transaction/types";
 import { DEFAULT_CURRENCY } from "@/constants/Currencies";
 
 export const useTransactionForm = () => {

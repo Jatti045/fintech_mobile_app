@@ -1,4 +1,4 @@
-import { ITransaction } from "@/api/transaction";
+import type { ITransaction } from "@/types/transaction/types";
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import budgetAPI from "@/api/budget";
 import {
@@ -10,25 +10,9 @@ import {
 } from "../../utils/cache";
 import { createTransaction } from "./transactionSlice";
 import { deleteTransaction } from "./transactionSlice";
+import type { IBudget, BudgetState } from "@/types/budget/types";
 
-export interface IBudget {
-  id: string;
-  date: Date;
-  category: string;
-  icon: string;
-  limit: number;
-  spent: number;
-  userId: string;
-  createdAt: string;
-  updatedAt: string;
-  transactions?: ITransaction[];
-}
-
-export interface BudgetState {
-  budgets: IBudget[];
-  loading: boolean;
-  error: string | null;
-}
+export type { IBudget, BudgetState };
 
 const initialState: BudgetState = {
   budgets: [],
@@ -46,7 +30,7 @@ export const createBudget = createAsyncThunk(
       month: number;
       year: number;
     },
-    { rejectWithValue }
+    { rejectWithValue },
   ) => {
     try {
       const response = await budgetAPI.create(budgetData);
@@ -56,7 +40,7 @@ export const createBudget = createAsyncThunk(
         await appendBudgetToCache(
           response.data,
           budgetData.year,
-          budgetData.month
+          budgetData.month,
         );
       } catch (e) {
         // ignore
@@ -66,7 +50,7 @@ export const createBudget = createAsyncThunk(
     } catch (error: any) {
       return rejectWithValue(error.message);
     }
-  }
+  },
 );
 
 export const fetchBudgets = createAsyncThunk(
@@ -76,7 +60,7 @@ export const fetchBudgets = createAsyncThunk(
       currentMonth,
       currentYear,
     }: { currentMonth: number; currentYear: number },
-    { rejectWithValue }
+    { rejectWithValue },
   ) => {
     try {
       // First try to use network and update cache
@@ -119,7 +103,7 @@ export const fetchBudgets = createAsyncThunk(
       }
       return rejectWithValue(error.message);
     }
-  }
+  },
 );
 
 export const deleteBudget = createAsyncThunk(
@@ -139,14 +123,14 @@ export const deleteBudget = createAsyncThunk(
     } catch (error: any) {
       return rejectWithValue(error.message);
     }
-  }
+  },
 );
 
 export const updateBudget = createAsyncThunk(
   "budget/updateBudget",
   async (
     { id, updates }: { id: string; updates: Partial<IBudget> },
-    { rejectWithValue }
+    { rejectWithValue },
   ) => {
     try {
       const response = await budgetAPI.update(id, updates as any);
@@ -166,7 +150,7 @@ export const updateBudget = createAsyncThunk(
     } catch (error: any) {
       return rejectWithValue(error.message);
     }
-  }
+  },
 );
 
 const budgetSlice = createSlice({
@@ -227,7 +211,7 @@ const budgetSlice = createSlice({
         state.loading = false;
         const deletedId = action.payload?.data ?? null;
         state.budgets = state.budgets.filter(
-          (budget) => budget.id !== deletedId
+          (budget) => budget.id !== deletedId,
         );
         (async () => {
           try {
@@ -254,7 +238,7 @@ const budgetSlice = createSlice({
         const updated = action.payload?.data ?? null;
         if (updated) {
           state.budgets = state.budgets.map((b) =>
-            b.id === String(updated.id) ? { ...b, ...updated } : b
+            b.id === String(updated.id) ? { ...b, ...updated } : b,
           );
         }
       })
@@ -276,7 +260,7 @@ const budgetSlice = createSlice({
         const amt = parseFloat(amount.toFixed(2));
 
         const txType = String(
-          tx.type ?? tx.transactionType ?? "EXPENSE"
+          tx.type ?? tx.transactionType ?? "EXPENSE",
         ).toUpperCase();
         // only increment spent for expenses
         if (txType !== "EXPENSE") return;
@@ -313,7 +297,7 @@ const budgetSlice = createSlice({
               if (b.id !== budgetId) return b;
               const current = Number(b.spent ?? 0);
               const newSpent = parseFloat(
-                Math.max(0, current - amt).toFixed(2)
+                Math.max(0, current - amt).toFixed(2),
               );
               return { ...b, spent: newSpent };
             });
@@ -335,7 +319,7 @@ const budgetSlice = createSlice({
               if (b.id !== txBudgetId) return b;
               const current = Number(b.spent ?? 0);
               const newSpent = parseFloat(
-                Math.max(0, current - amt).toFixed(2)
+                Math.max(0, current - amt).toFixed(2),
               );
               return { ...b, spent: newSpent };
             });
@@ -345,7 +329,7 @@ const budgetSlice = createSlice({
               if (String(b.category).toLowerCase() !== txCat) return b;
               const current = Number(b.spent ?? 0);
               const newSpent = parseFloat(
-                Math.max(0, current - amt).toFixed(2)
+                Math.max(0, current - amt).toFixed(2),
               );
               return { ...b, spent: newSpent };
             });

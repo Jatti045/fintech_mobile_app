@@ -1,4 +1,4 @@
-import { useTheme } from "@/hooks/useRedux";
+import { useBudgets, useTheme } from "@/hooks/useRedux";
 import { useThemedAlert } from "@/utils/themedAlert";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -17,8 +17,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { JSX } from "react/jsx-runtime";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useState, useEffect, useRef } from "react";
-import ModalCloseButton from "../modalCloseButton";
-import { IBudget } from "@/store/slices/budgetSlice";
+import ModalCloseButton from "../global/modalCloseButton";
+import type { IBudget } from "@/types/budget/types";
 import { capitalizeFirst } from "@/utils/helper";
 import { useTransactionOperations } from "@/hooks/transaction/useTransactionOperation";
 import {
@@ -31,16 +31,15 @@ import { getExchangeRate } from "@/utils/currencyConverter";
 function TransactionModal({
   openSheet,
   setOpenSheet,
-  budgets,
   editingTransaction,
   onClose,
 }: {
   openSheet: boolean;
   setOpenSheet: (val: boolean) => void;
   editingTransaction?: any;
-  budgets: IBudget[];
   onClose?: () => void;
 }) {
+  const budgets = useBudgets();
   const { THEME } = useTheme();
   const { showAlert } = useThemedAlert();
   const [showPicker, setShowPicker] = useState(false);

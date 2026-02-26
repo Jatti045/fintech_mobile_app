@@ -1,5 +1,7 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import transactionAPI, { ITransaction } from "../../api/transaction";
+import transactionAPI from "../../api/transaction";
+import type { ITransaction } from "@/types/transaction/types";
+import type { TransactionState } from "@/types/transaction/types";
 import {
   getTransactionsCache,
   setTransactionsCache,
@@ -8,42 +10,7 @@ import {
   removeTransactionFromCacheByIdAcrossAllMonths,
 } from "../../utils/cache";
 
-export interface TransactionState {
-  transactions: ITransaction[];
-  isLoading: boolean;
-  error: string | null;
-  filter: {
-    category: string | null;
-    dateRange: { start: string | null; end: string | null };
-  };
-  totalIncome: number;
-  totalExpense: number;
-  balance: number;
-  isAdding: boolean;
-  isEditing: boolean;
-  editingTransaction: ITransaction | null;
-  isDeleting: boolean;
-  deleteError: string | null;
-  isFetchingSummary: boolean;
-  summary: {
-    incomeByCategory: Record<string, number>;
-    expenseByCategory: Record<string, number>;
-    monthlyTrends: { month: string; income: number; expense: number }[];
-    topExpenses: ITransaction[];
-    topIncomes: ITransaction[];
-  };
-  pagination: {
-    currentPage: number;
-    totalPages: number;
-    totalCount: number;
-    hasNextPage: boolean;
-    hasPrevPage: boolean;
-  };
-  monthSummary: {
-    totalAmount: number;
-  };
-  isLoadingMore: boolean;
-}
+export type { TransactionState };
 
 const initialState: TransactionState = {
   transactions: [],
@@ -104,7 +71,7 @@ export const fetchTransaction = createAsyncThunk(
       page?: number;
       limit?: number;
     },
-    { rejectWithValue }
+    { rejectWithValue },
   ) => {
     try {
       // Disable cache when using pagination beyond first page
@@ -203,7 +170,7 @@ export const fetchTransaction = createAsyncThunk(
       }
       return rejectWithValue(error.message || "Failed to fetch transactions");
     }
-  }
+  },
 );
 
 // Fetch more transactions (for infinite scroll)
@@ -227,7 +194,7 @@ export const fetchMoreTransactions = createAsyncThunk(
       page?: number;
       limit?: number;
     },
-    { rejectWithValue }
+    { rejectWithValue },
   ) => {
     try {
       const response = await transactionAPI.fetchAll({
@@ -243,10 +210,10 @@ export const fetchMoreTransactions = createAsyncThunk(
       return response.data;
     } catch (error: any) {
       return rejectWithValue(
-        error.message || "Failed to fetch more transactions"
+        error.message || "Failed to fetch more transactions",
       );
     }
-  }
+  },
 );
 
 export const createTransaction = createAsyncThunk(
@@ -267,7 +234,7 @@ export const createTransaction = createAsyncThunk(
     } catch (error: any) {
       return rejectWithValue(error.message || "Failed to create transaction");
     }
-  }
+  },
 );
 
 export const deleteTransaction = createAsyncThunk(
@@ -284,7 +251,7 @@ export const deleteTransaction = createAsyncThunk(
           await removeTransactionFromCacheById(
             transactionId,
             d.getFullYear(),
-            d.getMonth()
+            d.getMonth(),
           );
         } else {
           // If server didn't return the deleted tx date, attempt to remove across all cached months
@@ -297,14 +264,14 @@ export const deleteTransaction = createAsyncThunk(
     } catch (error: any) {
       return rejectWithValue(error.message || "Failed to delete transaction");
     }
-  }
+  },
 );
 
 export const updateTransaction = createAsyncThunk(
   "transactions/update",
   async (
     { id, updates }: { id: string; updates: Partial<ITransaction> },
-    { rejectWithValue }
+    { rejectWithValue },
   ) => {
     try {
       console.log("Updating transaction id:", id, "with updates:", updates);
@@ -335,7 +302,7 @@ export const updateTransaction = createAsyncThunk(
     } catch (error: any) {
       return rejectWithValue(error.message || "Failed to update transaction");
     }
-  }
+  },
 );
 
 const transactionSlice = createSlice({
@@ -418,9 +385,15 @@ const transactionSlice = createSlice({
         state.transactions.push(created);
 
         // Optimistically update monthSummary when an EXPENSE is added
-        if (created && (created.type ?? "EXPENSE").toUpperCase() === "EXPENSE") {
+        if (
+          created &&
+          (created.type ?? "EXPENSE").toUpperCase() === "EXPENSE"
+        ) {
           state.monthSummary.totalAmount =
-            Math.round((state.monthSummary.totalAmount + Number(created.amount || 0)) * 100) / 100;
+            Math.round(
+              (state.monthSummary.totalAmount + Number(created.amount || 0)) *
+                100,
+            ) / 100;
         }
       })
       .addCase(createTransaction.rejected, (state, action) => {
@@ -440,14 +413,17 @@ const transactionSlice = createSlice({
         if (deletedId) {
           // Find the transaction before removing so we can adjust the summary
           const deletedTx = state.transactions.find((t) => t.id === deletedId);
-          if (deletedTx && (deletedTx.type ?? "EXPENSE").toUpperCase() === "EXPENSE") {
+          if (
+            deletedTx &&
+            (deletedTx.type ?? "EXPENSE").toUpperCase() === "EXPENSE"
+          ) {
             const amt = parseFloat(Number(deletedTx.amount || 0).toFixed(2));
             state.monthSummary.totalAmount = parseFloat(
-              Math.max(0, state.monthSummary.totalAmount - amt).toFixed(2)
+              Math.max(0, state.monthSummary.totalAmount - amt).toFixed(2),
             );
           }
           state.transactions = state.transactions.filter(
-            (t) => t.id !== deletedId
+            (t) => t.id !== deletedId,
           );
           (async () => {
             try {
@@ -479,14 +455,17 @@ const transactionSlice = createSlice({
             const oldAmt = Number(oldTx.amount || 0);
             const newAmt = Number(updated.amount || 0);
             if (oldAmt !== newAmt) {
-              state.monthSummary.totalAmount = Math.round(
-                Math.max(0, state.monthSummary.totalAmount - oldAmt + newAmt) *
-                  100
-              ) / 100;
+              state.monthSummary.totalAmount =
+                Math.round(
+                  Math.max(
+                    0,
+                    state.monthSummary.totalAmount - oldAmt + newAmt,
+                  ) * 100,
+                ) / 100;
             }
           }
           state.transactions = state.transactions.map((t) =>
-            t.id === updated.id ? updated : t
+            t.id === updated.id ? updated : t,
           );
         }
       })

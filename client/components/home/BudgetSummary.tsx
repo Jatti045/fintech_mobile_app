@@ -2,18 +2,16 @@ import React from "react";
 import { View, Text } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { formatCurrency } from "@/utils/helper";
-
-type Props = {
-  THEME: any;
-  /** Up to 3 budgets for the selected month are shown; extras are truncated. */
-  budgets: any[];
-};
+import { useBudgets, useTheme } from "@/hooks/useRedux";
+import type { IBudget } from "@/types/budget/types";
 
 /**
  * Compact list of up to 3 budgets for the month, each with a spend/limit
  * ratio and a colour-coded progress bar (red when over budget).
  */
-export default function BudgetSummary({ THEME, budgets }: Props) {
+export default function BudgetSummary() {
+  const { THEME } = useTheme();
+  const budgets = useBudgets();
   return (
     <View style={{ marginBottom: 16 }}>
       <Text

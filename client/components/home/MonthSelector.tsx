@@ -1,9 +1,9 @@
 import React from "react";
 import { View, Text, TouchableOpacity } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import { useTheme } from "@/hooks/useRedux";
 
 type Props = {
-  THEME: any;
   /** Pre-formatted label, e.g. "February 2026". */
   monthLabel: string;
   /** Disables the forward arrow when already at the current month. */
@@ -16,12 +16,12 @@ type Props = {
  * Centred month navigation row with previous / next chevron buttons.
  */
 export default function MonthSelector({
-  THEME,
   monthLabel,
   isCurrentMonth,
   onPrev,
   onNext,
 }: Props) {
+  const { THEME } = useTheme();
   return (
     <View
       style={{

@@ -1,16 +1,13 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
-import { userAPI, ILoginData, ISignupData, IUser } from "../../api/user";
+import { userAPI } from "../../api/user";
+import type {
+  ILoginData,
+  ISignupData,
+  IUser,
+  UserState,
+} from "@/types/user/types";
 
-// Types for the slice state
-export interface UserState {
-  user: IUser | null;
-  token: string | null;
-  isLoading: boolean;
-  isAuthenticated: boolean;
-  error: string | null;
-  loginError: string | null;
-  signupError: string | null;
-}
+export type { UserState };
 
 // Initial state
 const initialState: UserState = {

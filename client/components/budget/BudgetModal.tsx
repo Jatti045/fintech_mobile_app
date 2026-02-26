@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import ModalCloseButton from "../modalCloseButton";
+import ModalCloseButton from "../global/modalCloseButton";
 import { LinearGradient } from "expo-linear-gradient";
 import Loader from "@/utils/loader";
 import { SafeAreaView } from "react-native-safe-area-context";

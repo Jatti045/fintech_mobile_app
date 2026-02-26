@@ -11,7 +11,7 @@ import {
   LayoutChangeEvent,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import ModalCloseButton from "../modalCloseButton";
+import ModalCloseButton from "../global/modalCloseButton";
 import { useState, useRef } from "react";
 
 function InformationModal({

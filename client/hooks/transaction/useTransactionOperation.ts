@@ -6,7 +6,7 @@ import {
   deleteTransaction,
 } from "@/store/slices/transactionSlice";
 import { fetchBudgets } from "@/store/slices/budgetSlice";
-import { TransactionType } from "@/api/transaction";
+import { TransactionType } from "@/types/transaction/types";
 import { formatCurrency } from "@/utils/helper";
 import { useThemedAlert } from "@/utils/themedAlert";
 import { useAppDispatch, useCalendar } from "../useRedux";
