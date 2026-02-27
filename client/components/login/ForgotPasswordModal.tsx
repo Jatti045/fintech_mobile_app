@@ -14,6 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { useTheme } from "@/hooks/useRedux";
 import { useThemedAlert } from "@/utils/themedAlert";
+import { validateEmail } from "@/utils/validation";
 import { useState, useRef, useEffect } from "react";
 import ModalCloseButton from "../global/modalCloseButton";
 import Loader from "@/utils/loader";
@@ -42,14 +43,9 @@ function ForgotPasswordModal({
 
   const handleSubmit = async () => {
     const trimmed = email.trim();
-    if (!trimmed) {
-      showAlert({ title: "Please enter your email" });
-      return;
-    }
-    // basic email pattern
-    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailPattern.test(trimmed)) {
-      showAlert({ title: "Please enter a valid email address" });
+    const check = validateEmail(trimmed);
+    if (!check.valid) {
+      showAlert({ title: check.message! });
       return;
     }
 

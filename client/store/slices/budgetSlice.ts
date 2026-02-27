@@ -166,13 +166,6 @@ const budgetSlice = createSlice({
       .addCase(createBudget.fulfilled, (state, action) => {
         state.loading = false;
         state.budgets.push(action.payload.data);
-        (async () => {
-          try {
-            await appendBudgetToCache(action.payload.data);
-          } catch (e) {
-            // ignore
-          }
-        })();
         state.error = null;
       })
       .addCase(createBudget.rejected, (state, action) => {
@@ -187,17 +180,6 @@ const budgetSlice = createSlice({
         state.loading = false;
         state.budgets = action.payload;
         state.error = null;
-        (async () => {
-          try {
-            const arr = action.payload ?? [];
-            if (arr.length > 0) {
-              const d = new Date(arr[0].createdAt ?? arr[0].date ?? Date.now());
-              await setBudgetsCache(d.getFullYear(), d.getMonth(), arr);
-            }
-          } catch (e) {
-            // ignore
-          }
-        })();
       })
       .addCase(fetchBudgets.rejected, (state, action) => {
         state.loading = false;
@@ -213,17 +195,6 @@ const budgetSlice = createSlice({
         state.budgets = state.budgets.filter(
           (budget) => budget.id !== deletedId,
         );
-        (async () => {
-          try {
-            const id = action.payload?.data ?? null;
-            if (id) {
-              await removeBudgetFromCacheById(String(id));
-              await removeBudgetFromCacheByIdAcrossAllMonths(String(id));
-            }
-          } catch (e) {
-            // ignore
-          }
-        })();
       })
       .addCase(deleteBudget.rejected, (state, action) => {
         state.loading = false;

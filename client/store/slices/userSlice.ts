@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { userAPI } from "../../api/user";
+import { extractErrorMessage } from "@/utils/extractErrorMessage";
 import type {
   ILoginData,
   ISignupData,
@@ -27,13 +28,8 @@ export const loginUser = createAsyncThunk(
     try {
       const response = await userAPI.login(credentials);
       return response.data; // { user, token }
-    } catch (error: any) {
-      // apiClient normalizes errors to an object with `message` and `status`.
-      const msg =
-        (error && error.message) ||
-        (error && error.data && error.data.message) ||
-        "Login failed";
-      return rejectWithValue(msg);
+    } catch (error: unknown) {
+      return rejectWithValue(extractErrorMessage(error, "Login failed"));
     }
   },
 );
@@ -44,12 +40,8 @@ export const signupUser = createAsyncThunk(
     try {
       const response = await userAPI.signup(userData);
       return response.data;
-    } catch (error: any) {
-      const msg =
-        (error && error.message) ||
-        (error && error.data && error.data.message) ||
-        "Signup failed";
-      return rejectWithValue(msg);
+    } catch (error: unknown) {
+      return rejectWithValue(extractErrorMessage(error, "Signup failed"));
     }
   },
 );
@@ -59,8 +51,8 @@ export const logoutUser = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       await userAPI.logout();
-    } catch (error: any) {
-      return rejectWithValue(error.message || "Logout failed");
+    } catch (error: unknown) {
+      return rejectWithValue(extractErrorMessage(error, "Logout failed"));
     }
   },
 );
@@ -71,8 +63,10 @@ export const deleteUserAccount = createAsyncThunk(
     try {
       const response = await userAPI.deleteAccount(userId);
       return response;
-    } catch (error: any) {
-      return rejectWithValue(error.message || "Account deletion failed");
+    } catch (error: unknown) {
+      return rejectWithValue(
+        extractErrorMessage(error, "Account deletion failed"),
+      );
     }
   },
 );
@@ -92,8 +86,10 @@ export const loadUserFromStorage = createAsyncThunk(
         token,
         user: userData,
       };
-    } catch (error: any) {
-      return rejectWithValue(error.message || "Failed to load user data");
+    } catch (error: unknown) {
+      return rejectWithValue(
+        extractErrorMessage(error, "Failed to load user data"),
+      );
     }
   },
 );
@@ -111,9 +107,9 @@ export const uploadProfilePicture = createAsyncThunk(
       );
 
       return response.data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       return rejectWithValue(
-        error.message || "Failed to upload profile picture",
+        extractErrorMessage(error, "Failed to upload profile picture"),
       );
     }
   },
@@ -125,9 +121,9 @@ export const deleteProfilePicture = createAsyncThunk(
     try {
       const response = await userAPI.deleteProfilePictureById(userId);
       return response.data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       return rejectWithValue(
-        error.message || "Failed to delete profile picture",
+        extractErrorMessage(error, "Failed to delete profile picture"),
       );
     }
   },
@@ -146,12 +142,10 @@ export const changePassword = createAsyncThunk(
     try {
       const response = await userAPI.changePassword(payload);
       return response;
-    } catch (error: any) {
-      const msg =
-        (error && error.message) ||
-        (error && error.data && error.data.message) ||
-        "Change password failed";
-      return rejectWithValue(msg);
+    } catch (error: unknown) {
+      return rejectWithValue(
+        extractErrorMessage(error, "Change password failed"),
+      );
     }
   },
 );
@@ -162,12 +156,10 @@ export const updateUserCurrency = createAsyncThunk(
     try {
       const response = await userAPI.updateCurrency(currency);
       return response.data;
-    } catch (error: any) {
-      const msg =
-        (error && error.message) ||
-        (error && error.data && error.data.message) ||
-        "Failed to update currency";
-      return rejectWithValue(msg);
+    } catch (error: unknown) {
+      return rejectWithValue(
+        extractErrorMessage(error, "Failed to update currency"),
+      );
     }
   },
 );
@@ -178,12 +170,10 @@ export const forgotPassword = createAsyncThunk(
     try {
       const response = await userAPI.forgotPassword(payload);
       return response;
-    } catch (error: any) {
-      const msg =
-        (error && error.message) ||
-        (error && error.data && error.data.message) ||
-        "Forgot password failed";
-      return rejectWithValue(msg);
+    } catch (error: unknown) {
+      return rejectWithValue(
+        extractErrorMessage(error, "Forgot password failed"),
+      );
     }
   },
 );
@@ -203,12 +193,10 @@ export const resetPassword = createAsyncThunk(
     try {
       const response = await userAPI.resetPassword(payload);
       return response;
-    } catch (error: any) {
-      const msg =
-        (error && error.message) ||
-        (error && error.data && error.data.message) ||
-        "Reset password failed";
-      return rejectWithValue(msg);
+    } catch (error: unknown) {
+      return rejectWithValue(
+        extractErrorMessage(error, "Reset password failed"),
+      );
     }
   },
 );

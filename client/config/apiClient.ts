@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { router } from "expo-router";
+import { handleApiError } from "./apiErrorHandler";
 
 const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:3000/api";
@@ -34,7 +35,7 @@ apiClient.interceptors.request.use(
   (error) => {
     console.error("Request error:", error);
     return Promise.reject(error);
-  }
+  },
 );
 
 // Log responses and handle global errors
@@ -44,14 +45,7 @@ apiClient.interceptors.response.use(
     return response;
   },
   async (error) => {
-    // Normalize error object so callers can rely on a `message` property.
-    // Axios errors may include server payloads under error.response.data.
-    const defaultMsg = "An unexpected error occurred.";
-    const normalized: any = {
-      message: error?.response?.data?.message || error?.message || defaultMsg,
-      status: error?.response?.status,
-      data: error?.response?.data,
-    };
+    const normalized = handleApiError(error);
 
     console.error(`API Error: ${error.config?.url}`, normalized);
 
@@ -68,7 +62,7 @@ apiClient.interceptors.response.use(
 
     // Reject with a normalized error object so thunks can extract message
     return Promise.reject(normalized);
-  }
+  },
 );
 
 export default apiClient;

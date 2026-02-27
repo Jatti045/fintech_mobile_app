@@ -15,6 +15,8 @@ export default function TipOfTheDay() {
         padding: 14,
         borderRadius: 12,
         marginBottom: 18,
+        borderColor: THEME.border,
+        borderWidth: 1,
       }}
     >
       <Text

@@ -14,6 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import ModalCloseButton from "../global/modalCloseButton";
 import { useTheme, useAppDispatch, useAppSelector } from "@/hooks/useRedux";
 import { useThemedAlert } from "@/utils/themedAlert";
+import { validateResetPasswordForm } from "@/utils/validation";
 import { resetPassword, selectIsLoading } from "@/store/slices/userSlice";
 import { router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
@@ -63,19 +64,9 @@ function ResetPasswordModal({
   };
 
   const handleSubmit = async () => {
-    if (!newPassword || !confirmPassword) {
-      showAlert({ title: "Please fill both password fields" });
-      return;
-    }
-    if (newPassword.length < 6) {
-      showAlert({
-        title: "Password too short",
-        message: "Password must be at least 6 characters.",
-      });
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      showAlert({ title: "Passwords do not match" });
+    const check = validateResetPasswordForm(newPassword, confirmPassword);
+    if (!check.valid) {
+      showAlert({ title: check.message! });
       return;
     }
 

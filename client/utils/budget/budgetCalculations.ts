@@ -5,14 +5,9 @@
  * floating-point drift (e.g. `150.10 - 100.20` → `49.90`, not `49.900…01`).
  */
 
-/**
- * Safely coerces a possibly-string or undefined value to a finite number.
- * Returns `0` for NaN / Infinity / undefined / null — never throws.
- */
-export function safeAmount(raw: number | string | undefined | null): number {
-  const n = typeof raw === "string" ? parseFloat(raw) : Number(raw ?? 0);
-  return Number.isFinite(n) ? n : 0;
-}
+// Re-export the canonical safeAmount so existing imports don't break
+export { safeAmount } from "@/utils/transaction/helpers";
+import { safeAmount } from "@/utils/transaction/helpers";
 
 /**
  * Computes the overspend delta using **integer-cent math** to prevent

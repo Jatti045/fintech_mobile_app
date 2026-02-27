@@ -16,6 +16,7 @@ import { Link, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@/hooks/useRedux";
 import { useThemedAlert } from "@/utils/themedAlert";
+import { validateSignupForm } from "@/utils/validation";
 import {
   clearSignupError,
   signupUser,
@@ -42,50 +43,19 @@ const SignUpScreen = () => {
   const { isLoading } = useAuthStatus();
   const dispatch = useAppDispatch();
 
-  const validateEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
-
   const handleSignUp = async () => {
     dispatch(clearSignupError());
 
     try {
-      // Validation
-      if (
-        !username.trim() ||
-        !email.trim() ||
-        !password.trim() ||
-        !confirmPassword.trim()
-      ) {
-        showAlert({
-          title: "Validation Error",
-          message: "Please fill in all fields",
-        });
-        return;
-      }
-
-      if (!validateEmail(email)) {
-        showAlert({
-          title: "Validation Error",
-          message: "Please enter a valid email address",
-        });
-        return;
-      }
-
-      if (password.length < 6) {
-        showAlert({
-          title: "Validation Error",
-          message: "Password must be at least 6 characters",
-        });
-        return;
-      }
-
-      if (password !== confirmPassword) {
-        showAlert({
-          title: "Validation Error",
-          message: "Passwords do not match",
-        });
+      // Shared validation
+      const check = validateSignupForm(
+        username,
+        email,
+        password,
+        confirmPassword,
+      );
+      if (!check.valid) {
+        showAlert({ title: "Validation Error", message: check.message });
         return;
       }
 
@@ -97,7 +67,7 @@ const SignUpScreen = () => {
           email: normalizedEmail,
           password,
           confirmPassword,
-        })
+        }),
       ).unwrap();
 
       // Debugging log

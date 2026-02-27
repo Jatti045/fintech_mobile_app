@@ -425,13 +425,6 @@ const transactionSlice = createSlice({
           state.transactions = state.transactions.filter(
             (t) => t.id !== deletedId,
           );
-          (async () => {
-            try {
-              await removeTransactionFromCacheById(deletedId);
-            } catch (e) {
-              // ignore
-            }
-          })();
         }
       })
       .addCase(deleteTransaction.rejected, (state, action) => {

@@ -1,8 +1,10 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ScrollView, View } from "react-native";
+import { RefreshControl, ScrollView, View } from "react-native";
 import { useAppDispatch } from "@/store";
 import { nextMonth, prevMonth } from "@/store/slices/calendarSlice";
+import { fetchTransaction } from "@/store/slices/transactionSlice";
+import { fetchBudgets } from "@/store/slices/budgetSlice";
 import { HomeSkeleton } from "@/components/skeleton/SkeletonLoader";
 import { useThemedAlert } from "@/utils/themedAlert";
 import TransactionModal from "@/components/transaction/TxModal";
@@ -16,6 +18,9 @@ import QuickActions from "@/components/home/QuickActions";
 import BudgetSummary from "@/components/home/BudgetSummary";
 import RecentTransactions from "@/components/home/RecentTransactions";
 import TipOfTheDay from "@/components/home/TipOfTheDay";
+import BudgetHealthScore from "@/components/home/BudgetHealthScore";
+import SpendingTrends from "@/components/home/SpendingTrends";
+import CategoryComparison from "@/components/home/CategoryComparison";
 import {
   useTheme,
   useTransactions,
@@ -46,6 +51,33 @@ export default function Index() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [openTxModal, setOpenTxModal] = useState(false);
   const [openBudgetModal, setOpenBudgetModal] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        dispatch(
+          fetchTransaction({
+            searchQuery: "",
+            currentMonth: calendar.month,
+            currentYear: calendar.year,
+            page: 1,
+            limit: 10,
+            useCache: false,
+          }),
+        ),
+        dispatch(
+          fetchBudgets({
+            currentMonth: calendar.month,
+            currentYear: calendar.year,
+          }),
+        ),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [dispatch, calendar.month, calendar.year]);
 
   const monthStartDate = useMemo(
     () => new Date(calendar.year, calendar.month, 1),
@@ -121,6 +153,14 @@ export default function Index() {
       <ScrollView
         contentContainerStyle={{ padding: 18 }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            progressBackgroundColor={THEME.background}
+            colors={[THEME.primary]}
+          />
+        }
       >
         {/* Header with title and info button to open help modal */}
         <HomeHeader onInfoPress={() => setHelpOpen(true)} />
@@ -145,8 +185,17 @@ export default function Index() {
         {/* Budget summary cards with progress bars for each category */}
         <BudgetSummary />
 
+        {/* Budget health score gauge (0–100) */}
+        <BudgetHealthScore />
+
         {/* Chart showing top spending categories for the month, with bars colored by budget ratio */}
         <TopCategoriesChart label="Top Categories" totals={categoryTotals} />
+
+        {/* Category spend vs. last month comparison */}
+        <CategoryComparison categoryTotals={categoryTotals} />
+
+        {/* Bar chart showing spending totals for the last 6 months */}
+        <SpendingTrends />
 
         {/* List of 5 most recent transactions across all months */}
         <RecentTransactions transactions={recentTransactions} />

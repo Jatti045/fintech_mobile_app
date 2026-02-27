@@ -9,10 +9,13 @@ import { fetchBudgets } from "@/store/slices/budgetSlice";
 import { TransactionType } from "@/types/transaction/types";
 import { formatCurrency } from "@/utils/helper";
 import { useThemedAlert } from "@/utils/themedAlert";
+import { validateTransactionAmount } from "@/utils/validation";
+import { MAX_TRANSACTION_AMOUNT } from "@/constants/appConfig";
 import { useAppDispatch, useCalendar } from "../useRedux";
 import { useTransactionForm } from "./useTransactionForm";
 import { convertCurrency } from "@/utils/currencyConverter";
 import { getCurrencySymbol } from "@/constants/Currencies";
+import { hapticSuccess, hapticHeavy, hapticError } from "@/utils/haptics";
 
 /**
  * Combined hook that owns form state and exposes both create and update handlers.
@@ -53,16 +56,16 @@ export const useTransactionOperations = () => {
         return;
       }
 
-      const MAX_TRANSACTION_AMOUNT = 1_000_000;
-      const amt = Number(txAmount);
-
-      if (isNaN(amt) || amt <= 0 || amt > MAX_TRANSACTION_AMOUNT) {
+      const amtCheck = validateTransactionAmount(txAmount);
+      if (!amtCheck.valid) {
         showAlert({
           title: "Invalid Amount",
           message: `Amount must be between ${getCurrencySymbol(txCurrency)}0.01 and ${formatCurrency(MAX_TRANSACTION_AMOUNT, userCurrency)}.`,
         });
         return;
       }
+
+      const amt = Number(txAmount);
 
       // Convert amount if the transaction currency differs from the user's default
       let finalAmount = amt;
@@ -106,6 +109,7 @@ export const useTransactionOperations = () => {
         const response: any = await dispatch(createTransaction(payload));
         const { success, message } = response.payload ?? {};
         if (success) {
+          hapticSuccess();
           showAlert({ title: "Success", message: "Transaction created" });
           // Reset form only on success
           setTxName("");
@@ -203,6 +207,7 @@ export const useTransactionOperations = () => {
         );
         const { success, message } = response.payload ?? {};
         if (success) {
+          hapticSuccess();
           showAlert({
             title: "Updated",
             message: "Transaction updated successfully",
@@ -252,6 +257,7 @@ export const useTransactionOperations = () => {
    */
   const handleDeleteTransaction = useCallback(
     (id: string) => {
+      hapticHeavy();
       showAlert({
         title: "Delete Transaction",
         message: "Are you sure you want to delete this transaction?",
@@ -267,6 +273,7 @@ export const useTransactionOperations = () => {
                 // Small delay so the confirmation alert fully dismisses first
                 setTimeout(() => {
                   if (success) {
+                    hapticSuccess();
                     showAlert({
                       title: "Deleted",
                       message: "Transaction deleted successfully.",

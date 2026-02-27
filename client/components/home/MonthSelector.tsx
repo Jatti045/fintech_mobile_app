@@ -39,6 +39,8 @@ export default function MonthSelector({
           marginRight: 12,
           backgroundColor: THEME.surface,
           borderRadius: 8,
+          borderColor: THEME.border,
+          borderWidth: 1,
         }}
       >
         <Feather name="chevron-left" size={20} color={THEME.textPrimary} />
@@ -58,6 +60,8 @@ export default function MonthSelector({
           backgroundColor: THEME.surface,
           borderRadius: 8,
           opacity: isCurrentMonth ? 0.5 : 1,
+          borderColor: THEME.border,
+          borderWidth: 1,
         }}
       >
         <Feather name="chevron-right" size={20} color={THEME.textPrimary} />

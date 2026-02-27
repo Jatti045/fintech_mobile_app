@@ -8,6 +8,8 @@ import { useThemedAlert } from "@/utils/themedAlert";
 import { useAppDispatch, useCalendar, useTransactions } from "../useRedux";
 import { capitalizeFirst } from "@/utils/helper";
 import { useBudgetForm } from "./useBudgetForm";
+import { validateBudgetForm } from "@/utils/validation";
+import { hapticSuccess, hapticHeavy, hapticError } from "@/utils/haptics";
 
 /**
  * Combined hook that owns budget form state and exposes both create and update
@@ -39,25 +41,15 @@ export const useBudgetOperations = () => {
    */
   const handleCreateBudget = useCallback(
     async (setOpenSheet: (v: boolean) => void) => {
-      if (!budgetCategory.trim() || !budgetLimit.trim() || !budgetIcon.trim()) {
-        showAlert({
-          title: "Missing Information",
-          message: "Please enter category, icon, and limit",
-        });
+      const check = validateBudgetForm(budgetCategory, budgetIcon, budgetLimit);
+      if (!check.valid) {
+        showAlert({ title: "Missing Information", message: check.message });
         return;
       }
 
       const parsedCategory = capitalizeFirst(budgetCategory.trim());
       const parsedIcon = budgetIcon.trim();
       const parsedLimit = Number(budgetLimit);
-
-      if (isNaN(parsedLimit) || parsedLimit <= 0) {
-        showAlert({
-          title: "Invalid Amount",
-          message: "Please enter a valid numeric limit",
-        });
-        return;
-      }
 
       setBudgetSaving(true);
       try {
@@ -75,6 +67,7 @@ export const useBudgetOperations = () => {
           showAlert({ title: "Error", message: message || "Failed to save" });
           return;
         }
+        hapticSuccess();
         showAlert({ title: "Success", message: "Budget created successfully" });
         // Reset form only on success, preserving input on error for correction
         setBudgetCategory("");
@@ -109,25 +102,15 @@ export const useBudgetOperations = () => {
     async (editingBudget: any, setOpenSheet: (v: boolean) => void) => {
       if (!editingBudget) return;
 
-      if (!budgetCategory.trim() || !budgetIcon.trim() || !budgetLimit.trim()) {
-        showAlert({
-          title: "Missing Information",
-          message: "Please enter category, icon, and limit",
-        });
+      const check = validateBudgetForm(budgetCategory, budgetIcon, budgetLimit);
+      if (!check.valid) {
+        showAlert({ title: "Missing Information", message: check.message });
         return;
       }
 
       const parsedCategory = budgetCategory.trim();
       const parsedIcon = budgetIcon.trim();
       const parsedLimit = Number(budgetLimit);
-
-      if (isNaN(parsedLimit) || parsedLimit < 0) {
-        showAlert({
-          title: "Invalid Amount",
-          message: "Please enter a valid numeric limit",
-        });
-        return;
-      }
 
       // Detect no-op: skip API call if nothing has changed
       const noChange =
@@ -158,6 +141,7 @@ export const useBudgetOperations = () => {
         );
         const { success, message } = response.payload ?? {};
         if (success) {
+          hapticSuccess();
           showAlert({
             title: "Success",
             message: "Budget updated successfully",
@@ -206,6 +190,7 @@ export const useBudgetOperations = () => {
         return;
       }
 
+      hapticHeavy();
       showAlert({
         title: "Delete Budget",
         message: "Are you sure you want to delete this budget?",
@@ -220,6 +205,7 @@ export const useBudgetOperations = () => {
                 const { success, message } = response?.payload ?? {};
                 setTimeout(() => {
                   if (success) {
+                    hapticSuccess();
                     showAlert({
                       title: "Success",
                       message: "Budget deleted successfully",

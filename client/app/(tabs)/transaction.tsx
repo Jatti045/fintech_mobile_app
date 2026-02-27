@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { SectionList, Text, View } from "react-native";
+import { RefreshControl, SectionList, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import TransactionModal from "@/components/transaction/TxModal";
 import SearchTransaction from "@/components/transaction/TxSearchBar";
@@ -18,7 +18,11 @@ import {
   useTheme,
   useTransactions,
   useTransactionStatus,
+  useCalendar,
 } from "@/hooks/useRedux";
+import { useAppDispatch } from "@/store";
+import { fetchTransaction } from "@/store/slices/transactionSlice";
+import { fetchBudgets } from "@/store/slices/budgetSlice";
 import Loader from "@/utils/loader";
 
 export default function TransactionScreen() {
@@ -26,6 +30,35 @@ export default function TransactionScreen() {
   const budgets = useBudgets();
   const { THEME } = useTheme();
   const { isAdding, isEditing, isDeleting, isLoading } = useTransactionStatus();
+  const calendar = useCalendar();
+  const dispatch = useAppDispatch();
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        dispatch(
+          fetchTransaction({
+            searchQuery: "",
+            currentMonth: calendar.month,
+            currentYear: calendar.year,
+            page: 1,
+            limit: 10,
+            useCache: false,
+          }),
+        ),
+        dispatch(
+          fetchBudgets({
+            currentMonth: calendar.month,
+            currentYear: calendar.year,
+          }),
+        ),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [dispatch, calendar.month, calendar.year]);
 
   // Only the delete handler is needed at screen level;
   // create + update are fully managed inside TransactionModal.
@@ -129,58 +162,91 @@ export default function TransactionScreen() {
     );
   }
 
+  /** Header content rendered above the transaction list (title + search + filters). */
+  const listHeader = useMemo(
+    () => (
+      <>
+        {/* Screen title */}
+        <View className="items-center justify-center my-4 mb-6">
+          <Text
+            style={{ color: THEME.textPrimary }}
+            className="text-2xl font-bold"
+          >
+            Transactions
+          </Text>
+        </View>
+
+        {/* Search bar */}
+        <SearchTransaction
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+        />
+
+        {/* Category + amount filters */}
+        <FilterTransaction
+          budgets={budgets}
+          filterCategoryId={filterCategoryId}
+          setFilterCategoryId={setFilterCategoryId}
+          minAmount={minAmount}
+          setMinAmount={setMinAmount}
+          maxAmount={maxAmount}
+          setMaxAmount={setMaxAmount}
+          clearFilters={clearFilters}
+        />
+      </>
+    ),
+    [
+      THEME.textPrimary,
+      searchQuery,
+      setSearchQuery,
+      budgets,
+      filterCategoryId,
+      setFilterCategoryId,
+      minAmount,
+      setMinAmount,
+      maxAmount,
+      setMaxAmount,
+      clearFilters,
+    ],
+  );
+
+  /** Empty state shown when no transactions match the current filters. */
+  const listEmpty = useMemo(
+    () => (
+      <View className="py-12 items-center">
+        <Text style={{ color: THEME.textSecondary }}>
+          No transactions match filters.
+        </Text>
+      </View>
+    ),
+    [THEME.textSecondary],
+  );
+
   return (
     <SafeAreaView
       edges={["left", "right"]}
       style={{ backgroundColor: THEME.background, flex: 1 }}
       className="px-4"
     >
-      {/* Screen title */}
-      <View className="items-center justify-center my-4 mb-6">
-        <Text
-          style={{ color: THEME.textPrimary }}
-          className="text-2xl font-bold"
-        >
-          Transactions
-        </Text>
-      </View>
-
-      {/* Search bar */}
-      <SearchTransaction
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
+      <SectionList
+        sections={sectionsWithTotals}
+        keyExtractor={keyExtractor}
+        renderSectionHeader={renderSectionHeader as any}
+        renderItem={renderItem as any}
+        contentContainerStyle={{ paddingBottom: 120, paddingTop: 8 }}
+        showsVerticalScrollIndicator={false}
+        ListHeaderComponent={listHeader}
+        ListEmptyComponent={listEmpty}
+        ListFooterComponent={listFooter}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            progressBackgroundColor={THEME.background}
+            colors={[THEME.primary]}
+          />
+        }
       />
-
-      {/* Category + amount filters */}
-      <FilterTransaction
-        budgets={budgets}
-        filterCategoryId={filterCategoryId}
-        setFilterCategoryId={setFilterCategoryId}
-        minAmount={minAmount}
-        setMinAmount={setMinAmount}
-        maxAmount={maxAmount}
-        setMaxAmount={setMaxAmount}
-        clearFilters={clearFilters}
-      />
-
-      {/* Transaction list or empty state */}
-      {sectionsWithTotals.length === 0 ? (
-        <View className="py-12 items-center">
-          <Text style={{ color: THEME.textSecondary }}>
-            No transactions match filters.
-          </Text>
-        </View>
-      ) : (
-        <SectionList
-          sections={sectionsWithTotals}
-          keyExtractor={keyExtractor}
-          renderSectionHeader={renderSectionHeader as any}
-          renderItem={renderItem as any}
-          contentContainerStyle={{ paddingBottom: 120, paddingTop: 8 }}
-          showsVerticalScrollIndicator={false}
-          ListFooterComponent={listFooter}
-        />
-      )}
 
       {/* Create / Edit modal — self-contained via useTransactionOperations */}
       <TransactionModal
