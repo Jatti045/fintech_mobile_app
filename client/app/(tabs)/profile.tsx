@@ -9,11 +9,12 @@ import {
   Modal,
   TextInput,
   FlatList,
+  RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import * as ImagePicker from "expo-image-picker";
 import { useAppDispatch, useAppSelector, useAuth } from "@/hooks/useRedux";
 import {
@@ -23,6 +24,7 @@ import {
   deleteProfilePicture,
   changePassword,
   updateUserCurrency,
+  loadUserFromStorage,
 } from "@/store/slices/userSlice";
 import ModalCloseButton from "@/components/global/modalCloseButton";
 import { router } from "expo-router";
@@ -41,10 +43,20 @@ import { clearRatesCache } from "@/utils/currencyConverter";
 export default function ProfileScreen() {
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const dispatch = useAppDispatch();
   const { user, error } = useAuth();
   const { THEME, selectedTheme } = useTheme();
   const { showAlert } = useThemedAlert();
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await dispatch(loadUserFromStorage());
+    } finally {
+      setRefreshing(false);
+    }
+  }, [dispatch]);
 
   // Show error alerts for Redux state errors
   useEffect(() => {
@@ -278,7 +290,18 @@ export default function ProfileScreen() {
       style={{ backgroundColor: THEME.background }}
       className="flex-1"
     >
-      <ScrollView showsVerticalScrollIndicator={false} className="flex-1 px-6">
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        className="flex-1 px-6"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            progressBackgroundColor={THEME.background}
+            colors={[THEME.primary]}
+          />
+        }
+      >
         {/* Header */}
         <View className="items-center justify-center mt-4 mb-8">
           <Text

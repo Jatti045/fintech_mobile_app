@@ -1,7 +1,14 @@
 import React, { useCallback, useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useBudgets, useTheme, useBudgetStatus } from "@/hooks/useRedux";
+import {
+  useBudgets,
+  useTheme,
+  useBudgetStatus,
+  useCalendar,
+} from "@/hooks/useRedux";
+import { useAppDispatch } from "@/store";
+import { fetchBudgets } from "@/store/slices/budgetSlice";
 import {
   BudgetCard,
   BudgetModal,
@@ -19,6 +26,8 @@ export default function BudgetScreen() {
   const budgets = useBudgets();
   const { THEME } = useTheme();
   const { isLoading } = useBudgetStatus();
+  const calendar = useCalendar();
+  const dispatch = useAppDispatch();
 
   // Only the delete handler is needed at screen level;
   // create + update are fully managed inside BudgetModal.
@@ -30,6 +39,21 @@ export default function BudgetScreen() {
   // ── Screen-level state ────────────────────────────────────────────────
   const [openSheet, setOpenSheet] = useState(false);
   const [editingBudget, setEditingBudget] = useState<IBudget | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await dispatch(
+        fetchBudgets({
+          currentMonth: calendar.month,
+          currentYear: calendar.year,
+        }),
+      );
+    } finally {
+      setRefreshing(false);
+    }
+  }, [dispatch, calendar.month, calendar.year]);
 
   // ── Stable callbacks ──────────────────────────────────────────────────
 
@@ -73,7 +97,16 @@ export default function BudgetScreen() {
       className="flex-1"
       style={{ backgroundColor: THEME.background }}
     >
-      <ScrollView>
+      <ScrollView
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            progressBackgroundColor={THEME.background}
+            colors={[THEME.primary]}
+          />
+        }
+      >
         <View className="flex-1 px-4" style={{ paddingTop: 18 }}>
           {/* Header */}
           <View style={{ marginBottom: 12 }}>
