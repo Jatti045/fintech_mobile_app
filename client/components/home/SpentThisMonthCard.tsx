@@ -21,6 +21,8 @@ export default function SpentThisMonthCard({ total }: Props) {
         padding: 18,
         borderRadius: 16,
         marginBottom: 18,
+        borderColor: THEME.border,
+        borderWidth: 1,
       }}
     >
       <Text style={{ color: THEME.textSecondary, marginBottom: 8 }}>

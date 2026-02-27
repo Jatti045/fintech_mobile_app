@@ -1,18 +1,12 @@
-import React, { useMemo, useRef } from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  Animated,
-  StyleSheet,
-} from "react-native";
-import { Swipeable } from "react-native-gesture-handler";
+import React, { useMemo } from "react";
+import { View, Text, TouchableOpacity } from "react-native";
 import { useBudgets, useTheme } from "@/hooks/useRedux";
 import { formatDate, capitalizeFirst, formatCurrency } from "@/utils/helper";
 import { safeAmount } from "../../utils/transaction/helpers";
 import type { TransactionItem } from "../../types/transaction/types";
 import { Feather } from "@expo/vector-icons";
 import { hapticHeavy } from "@/utils/haptics";
+import SwipeableRow from "@/components/global/SwipeableRow";
 
 /**
  * Single transaction row with press-to-edit, long-press-to-delete, and
@@ -31,7 +25,6 @@ const TransactionRow = React.memo(function TransactionRow({
   const { THEME } = useTheme();
   const budgets = useBudgets();
   const amt = safeAmount(tx.amount);
-  const swipeableRef = useRef<Swipeable>(null);
 
   const displayCategory = useMemo(() => {
     if (tx.budgetId) {
@@ -51,41 +44,8 @@ const TransactionRow = React.memo(function TransactionRow({
     return tx.icon;
   }, [tx.category, budgets]);
 
-  /** Red delete button revealed when the user swipes right-to-left. */
-  const renderRightActions = (
-    _progress: Animated.AnimatedInterpolation<number>,
-    dragX: Animated.AnimatedInterpolation<number>,
-  ) => {
-    const scale = dragX.interpolate({
-      inputRange: [-80, 0],
-      outputRange: [1, 0.5],
-      extrapolate: "clamp",
-    });
-
-    return (
-      <TouchableOpacity
-        style={[styles.deleteAction, { backgroundColor: THEME.danger }]}
-        activeOpacity={0.7}
-        onPress={() => {
-          hapticHeavy();
-          swipeableRef.current?.close();
-          onDelete(tx.id);
-        }}
-      >
-        <Animated.View style={{ transform: [{ scale }] }}>
-          <Feather name="trash-2" size={22} color="#fff" />
-        </Animated.View>
-      </TouchableOpacity>
-    );
-  };
-
   return (
-    <Swipeable
-      ref={swipeableRef}
-      renderRightActions={renderRightActions}
-      overshootRight={false}
-      friction={2}
-    >
+    <SwipeableRow onDelete={() => onDelete(tx.id)} dangerColor={THEME.danger}>
       <TouchableOpacity
         style={{
           backgroundColor: THEME.surface,
@@ -142,25 +102,8 @@ const TransactionRow = React.memo(function TransactionRow({
           </Text>
         </View>
       </TouchableOpacity>
-    </Swipeable>
+    </SwipeableRow>
   );
-});
-
-const styles = StyleSheet.create({
-  deleteAction: {
-    justifyContent: "center",
-    alignItems: "center",
-    width: 80,
-    borderRadius: 8,
-    marginBottom: 12,
-    marginLeft: 8,
-  },
-  deleteText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "600",
-    marginTop: 4,
-  },
 });
 
 export default TransactionRow;

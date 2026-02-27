@@ -45,6 +45,8 @@ export default function BudgetSummary() {
                 padding: 12,
                 borderRadius: 12,
                 marginBottom: 10,
+                borderColor: THEME.border,
+                borderWidth: 1,
               }}
             >
               <View

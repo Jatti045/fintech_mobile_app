@@ -39,6 +39,8 @@ export const TopCategoriesChart = React.memo(({ label, totals }: Props) => {
         padding: 12,
         alignItems: "flex-start",
         marginBottom: 16,
+        borderColor: THEME.border,
+        borderWidth: 1,
       }}
     >
       <Text

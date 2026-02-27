@@ -94,6 +94,8 @@ export default function SpendingTrends() {
         borderRadius: 12,
         padding: 14,
         marginBottom: 16,
+        borderColor: THEME.border,
+        borderWidth: 1,
       }}
     >
       <Text

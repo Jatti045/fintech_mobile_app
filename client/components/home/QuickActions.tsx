@@ -28,7 +28,12 @@ export default function QuickActions({ onNewTransaction, onNewBudget }: Props) {
         Quick Actions
       </Text>
 
-      <View style={{ flexDirection: "row", marginBottom: 16 }}>
+      <View
+        style={{
+          flexDirection: "row",
+          marginBottom: 16,
+        }}
+      >
         <TouchableOpacity
           style={{
             flex: 1,
@@ -37,6 +42,8 @@ export default function QuickActions({ onNewTransaction, onNewBudget }: Props) {
             padding: 12,
             borderRadius: 12,
             alignItems: "center",
+            borderColor: THEME.border,
+            borderWidth: 1,
           }}
           onPress={onNewTransaction}
         >
@@ -54,6 +61,8 @@ export default function QuickActions({ onNewTransaction, onNewBudget }: Props) {
             padding: 12,
             borderRadius: 12,
             alignItems: "center",
+            borderColor: THEME.border,
+            borderWidth: 1,
           }}
           onPress={onNewBudget}
         >

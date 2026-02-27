@@ -88,6 +88,8 @@ export default function BudgetHealthScore() {
         borderRadius: 16,
         padding: 16,
         marginBottom: 16,
+        borderColor: THEME.border,
+        borderWidth: 1,
       }}
     >
       {/* Header row */}

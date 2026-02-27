@@ -120,11 +120,13 @@ function InformationModal({
               Deleting — Important
             </Text>
             <Text style={{ color: THEME.textSecondary, marginBottom: 12 }}>
-              Long-press a transaction to delete it. Long-press a budget card to
-              delete the budget. Budgets that have transactions attached cannot
-              be deleted — you'll be prompted to remove or reassign those
-              transactions first. When you delete a transaction, the app updates
-              the associated budget's spent amount automatically.
+              Swipe any transaction or budget card to the left to reveal a
+              delete button — this is the quickest way to remove items. You can
+              also long-press a transaction or budget card to delete it. Budgets
+              that have transactions attached cannot be deleted — you'll be
+              prompted to remove or reassign those transactions first. When you
+              delete a transaction, the app updates the associated budget's
+              spent amount automatically.
             </Text>
 
             <Text
@@ -166,6 +168,55 @@ function InformationModal({
                 marginBottom: 8,
               }}
             >
+              Search & Filter
+            </Text>
+            <Text style={{ color: THEME.textSecondary, marginBottom: 12 }}>
+              Both the Transactions and Budgets tabs include a search bar at the
+              top. Type a keyword to instantly filter items by name or category.
+              The search is case-insensitive and updates as you type.
+            </Text>
+
+            <Text
+              style={{
+                color: THEME.textPrimary,
+                fontWeight: "700",
+                marginBottom: 8,
+              }}
+            >
+              Home Insights
+            </Text>
+            <Text style={{ color: THEME.textSecondary, marginBottom: 12 }}>
+              The home screen features three analytics cards:{"\n"}• Budget
+              Health Score — a quick gauge of how well you're staying within
+              your budgets for the selected month.{"\n"}• Spending Trends — a
+              bar chart comparing your spending over the last few months.{"\n"}•
+              Category Comparison — a visual breakdown showing which categories
+              consume the most of your budget.
+            </Text>
+
+            <Text
+              style={{
+                color: THEME.textPrimary,
+                fontWeight: "700",
+                marginBottom: 8,
+              }}
+            >
+              Themes & Currency
+            </Text>
+            <Text style={{ color: THEME.textSecondary, marginBottom: 12 }}>
+              Head to the Profile tab to switch between Light, Dark, Ocean, and
+              Rose colour themes. You can also change your default display
+              currency from the same screen — all monetary values will be shown
+              in the selected currency.
+            </Text>
+
+            <Text
+              style={{
+                color: THEME.textPrimary,
+                fontWeight: "700",
+                marginBottom: 8,
+              }}
+            >
               Offline Cache & Performance
             </Text>
             <Text style={{ color: THEME.textSecondary, marginBottom: 12 }}>
@@ -186,15 +237,18 @@ function InformationModal({
               Tips & Best Practices
             </Text>
             <Text style={{ color: THEME.textSecondary, marginBottom: 12 }}>
-              • Use short category names (e.g. Groceries, Transport).
+              • Swipe left on any transaction or budget card to quickly delete
+              it.
+              {"\n"}• Use short category names (e.g. Groceries, Transport).
               {"\n"}• Tap a budget card to edit it (opens the same form used to
               create budgets). Long-press a budget to delete it (only possible
               when no transactions are attached).
               {"\n"}• If you change a budget limit, the app will block reducing
               the limit below the amount already spent for that period.
-              {"\n"}• Transactions are cached per-user-per-month for faster load
-              times. The app attempts to keep the cache up-to-date when you add
-              or delete items.
+              {"\n"}• Use the search bar on the Transactions or Budgets tab to
+              quickly find items by name or category.
+              {"\n"}• Check the Budget Health Score on the home screen to see
+              how your spending compares to your limits at a glance.
             </Text>
           </ScrollView>
 
