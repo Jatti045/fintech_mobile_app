@@ -4,6 +4,7 @@ import { useBudgets, useTheme } from "@/hooks/useRedux";
 import { formatDate, capitalizeFirst, formatCurrency } from "@/utils/helper";
 import { safeAmount } from "../../utils/transaction/helpers";
 import type { TransactionItem } from "../../types/transaction/types";
+import { Feather } from "@expo/vector-icons";
 
 /**
  * Single transaction row with press-to-edit and long-press-to-delete behaviour.
@@ -31,6 +32,15 @@ const TransactionRow = React.memo(function TransactionRow({
     return tx.category;
   }, [tx.budgetId, tx.category, budgets]);
 
+  const displayTxIcon = useMemo(() => {
+    if (tx.budgetId) {
+      const linked = budgets.find((b) => b.id === tx.budgetId);
+      if (linked) return linked.icon;
+    }
+
+    return tx.icon;
+  }, [tx.category, budgets]);
+
   return (
     <TouchableOpacity
       style={{
@@ -44,6 +54,20 @@ const TransactionRow = React.memo(function TransactionRow({
       onLongPress={() => onDelete(tx.id)}
     >
       <View style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
+        <View
+          className="items-center rounded-full p-3"
+          style={{
+            backgroundColor: THEME.inputBackground,
+            borderColor: THEME.border,
+            borderWidth: 1,
+          }}
+        >
+          <Feather
+            name={displayTxIcon as keyof typeof Feather.glyphMap}
+            size={20}
+            color={THEME.primary}
+          />
+        </View>
         <View style={{ marginLeft: 12, flex: 1, minWidth: 0 }}>
           <Text
             style={{ color: THEME.textPrimary, fontWeight: "700" }}
