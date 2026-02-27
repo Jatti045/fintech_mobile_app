@@ -166,13 +166,21 @@ export const useTransactionOperations = () => {
       if (!editingTransaction) return;
 
       // Detect no-op: skip API call if nothing has changed
+      const currencyChanged = txCurrency !== userCurrency;
+      const wasCurrencyTransaction = !!editingTransaction.originalCurrency;
+      const sameCurrencyState =
+        currencyChanged === wasCurrencyTransaction &&
+        (!currencyChanged ||
+          txCurrency === editingTransaction.originalCurrency);
+
       const noChange =
         editingTransaction.name === txName.trim() &&
         Number(editingTransaction.amount) === Number(txAmount) &&
         (editingTransaction.budgetId || "") ===
           (txSelectedCategoryAndId.id || "") &&
         new Date(editingTransaction.date).toISOString() ===
-          txDate.toISOString();
+          txDate.toISOString() &&
+        sameCurrencyState;
 
       if (noChange) {
         showAlert({
@@ -182,12 +190,37 @@ export const useTransactionOperations = () => {
         return;
       }
 
+      // Handle currency conversion if the transaction currency differs from user default
+      let finalAmount = Number(txAmount);
+      let originalCurrency: string | null = null;
+      let originalAmount: number | null = null;
+
+      if (txCurrency !== userCurrency) {
+        try {
+          finalAmount = await convertCurrency(
+            Number(txAmount),
+            txCurrency,
+            userCurrency,
+          );
+          originalCurrency = txCurrency;
+          originalAmount = Number(txAmount);
+        } catch (err: any) {
+          showAlert({
+            title: "Conversion Error",
+            message:
+              err.message ||
+              `Failed to convert from ${txCurrency} to ${userCurrency}. Please try again.`,
+          });
+          return;
+        }
+      }
+
       // Build a partial update with only changed fields to minimise payload size
       const updates: any = {};
       if (editingTransaction.name !== txName.trim())
         updates.name = txName.trim();
-      if (Number(editingTransaction.amount) !== Number(txAmount))
-        updates.amount = Number(txAmount);
+      if (Number(editingTransaction.amount) !== finalAmount)
+        updates.amount = finalAmount;
       if (
         (editingTransaction.budgetId || "") !==
         (txSelectedCategoryAndId.id || "")
@@ -197,6 +230,14 @@ export const useTransactionOperations = () => {
         new Date(editingTransaction.date).toISOString() !== txDate.toISOString()
       )
         updates.date = txDate.toISOString();
+
+      // Always send currency fields when they've changed
+      if (!sameCurrencyState) {
+        updates.originalCurrency = originalCurrency;
+        updates.originalAmount = originalAmount;
+        // Also update amount with the converted value
+        updates.amount = finalAmount;
+      }
 
       // Close modal first so any loader overlay is visible
       setOpenSheet(false);
@@ -245,6 +286,8 @@ export const useTransactionOperations = () => {
       txAmount,
       txDate,
       txSelectedCategoryAndId,
+      txCurrency,
+      userCurrency,
       showAlert,
       calendar,
       dispatch,

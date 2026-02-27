@@ -585,6 +585,8 @@ export const updateTransaction = asyncHandler(
         description,
         budgetId: rawBudgetId,
         goalId: rawGoalId,
+        originalCurrency,
+        originalAmount,
       } = req.body;
 
       // Validate provided fields
@@ -765,6 +767,11 @@ export const updateTransaction = asyncHandler(
           description && String(description).trim() !== ""
             ? String(description).trim()
             : null;
+      if (req.body.hasOwnProperty("originalCurrency"))
+        updateData.originalCurrency = originalCurrency || null;
+      if (req.body.hasOwnProperty("originalAmount"))
+        updateData.originalAmount =
+          originalAmount != null ? Number(originalAmount) : null;
       // set budgetId/goalId explicitly (allow null)
       if (req.body.hasOwnProperty("budgetId"))
         updateData.budgetId = newBudgetId;

@@ -168,10 +168,13 @@ function TransactionModal({
         <View className="relative">
           <ModalCloseButton setOpenSheet={setOpenSheet} />
         </View>
-        <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
-            className="flex-1"
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 40 }}
           >
             <Text
               className="text-center text-xl font-bold py-8"
@@ -514,8 +517,8 @@ function TransactionModal({
                 </TouchableOpacity>
               </View>
             </View>
-          </KeyboardAvoidingView>
-        </ScrollView>
+          </ScrollView>
+        </KeyboardAvoidingView>
 
         {/* Currency Picker Modal */}
         {showCurrencyPicker && (
