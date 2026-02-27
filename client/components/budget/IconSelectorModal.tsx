@@ -27,16 +27,21 @@ const IconSelectorModal = ({
   const [searchTerm, setSearchTerm] = useState("");
   const searchInputRef = useRef<TextInput>(null);
 
+  // Memoized icons
+  const MemoizedIcons = useMemo(() => {
+    return ICONS;
+  }, []);
+
   // Memoized filtered icons - searches both name and label
   const filteredIcons = useMemo(() => {
     if (searchTerm.trim() === "") {
-      return ICONS;
+      return MemoizedIcons;
     }
     const lowerSearchTerm = searchTerm.toLowerCase();
-    return ICONS.filter(
+    return MemoizedIcons.filter(
       (icon) =>
         icon.name.toLowerCase().includes(lowerSearchTerm) ||
-        icon.label.toLowerCase().includes(lowerSearchTerm)
+        icon.label.toLowerCase().includes(lowerSearchTerm),
     );
   }, [searchTerm]);
 
