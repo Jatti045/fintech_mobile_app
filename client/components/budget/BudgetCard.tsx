@@ -8,6 +8,7 @@ import {
   overspendDeltaCents,
 } from "@/utils/budget/budgetCalculations";
 import type { IBudget } from "@/types/budget/types";
+import { hapticLight, hapticHeavy } from "@/utils/haptics";
 
 /** Props for a single budget card. */
 export interface BudgetCardProps {
@@ -59,8 +60,14 @@ const BudgetCard = React.memo(function BudgetCard({
   return (
     <TouchableOpacity
       activeOpacity={0.9}
-      onPress={() => onEdit(budget)}
-      onLongPress={() => onDelete(budget.id)}
+      onPress={() => {
+        hapticLight();
+        onEdit(budget);
+      }}
+      onLongPress={() => {
+        hapticHeavy();
+        onDelete(budget.id);
+      }}
     >
       <View
         style={{

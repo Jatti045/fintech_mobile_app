@@ -12,165 +12,99 @@ import {
 
 export type { ILoginData, ISignupData, IUser, IAuthResponse };
 
+/**
+ * Clears all per-user cache entries and auth tokens from AsyncStorage.
+ * Shared by `logout()` and `deleteAccount()` to avoid duplication.
+ */
+async function clearUserStorage(userId?: string | null): Promise<void> {
+  if (userId) {
+    try {
+      const allKeys = await AsyncStorage.getAllKeys();
+      const keysToRemove = allKeys.filter(
+        (k) =>
+          k.startsWith(`transactions:${userId}:`) ||
+          k.startsWith(`budgets:${userId}:`),
+      );
+      if (keysToRemove.length > 0) await AsyncStorage.multiRemove(keysToRemove);
+    } catch {
+      // ignore
+    }
+  }
+  await AsyncStorage.multiRemove(["authToken", "userData"]);
+}
+
 class UserAPI extends BaseAPI {
   async login(
     credentials: ILoginData,
   ): Promise<IApiResponse<{ user: IUser; token: string }>> {
-    try {
-      const response = await this.makeRequest<{ user: IUser; token: string }>(
-        "/user/login",
-        {
-          method: "POST",
-          data: credentials,
-        },
-      );
+    const response = await this.makeRequest<{ user: IUser; token: string }>(
+      "/user/login",
+      { method: "POST", data: credentials },
+    );
 
-      await AsyncStorage.setItem("authToken", response.data.token);
-      await AsyncStorage.setItem(
-        "userData",
-        JSON.stringify(response.data.user),
-      );
+    await AsyncStorage.setItem("authToken", response.data.token);
+    await AsyncStorage.setItem("userData", JSON.stringify(response.data.user));
 
-      return response;
-    } catch (error: any) {
-      console.error("Login failed: ", error.message);
-      throw error;
-    }
+    return response;
   }
 
   async signup(userData: ISignupData): Promise<IApiResponse<any>> {
-    try {
-      const response = await this.makeRequest<any>("/user/signup", {
-        method: "POST",
-        data: userData,
-      });
-
-      return response;
-    } catch (error: any) {
-      console.error("Signup failed:", error.message);
-      throw error;
-    }
+    return this.makeRequest<any>("/user/signup", {
+      method: "POST",
+      data: userData,
+    });
   }
 
   async logout(): Promise<void> {
-    try {
-      // Remove stored authentication data
-      // Attempt to clear user-scoped caches as well
-      const rawUser = await AsyncStorage.getItem("userData");
-      const userId = rawUser ? JSON.parse(rawUser)?.id : null;
-      if (userId) {
-        try {
-          const allKeys = await AsyncStorage.getAllKeys();
-          const keysToRemove = allKeys.filter(
-            (k) =>
-              k.startsWith(`transactions:${userId}:`) ||
-              k.startsWith(`budgets:${userId}:`),
-          );
-          if (keysToRemove.length > 0)
-            await AsyncStorage.multiRemove(keysToRemove);
-        } catch (e) {
-          // ignore
-        }
-      }
-
-      await AsyncStorage.removeItem("authToken");
-      await AsyncStorage.removeItem("userData");
-    } catch (error: any) {
-      console.error("Logout failed:", error.message);
-      throw error;
-    }
+    const rawUser = await AsyncStorage.getItem("userData");
+    const userId = rawUser ? JSON.parse(rawUser)?.id : null;
+    await clearUserStorage(userId);
   }
 
   async deleteAccount(userId: string): Promise<IApiResponse<IUser>> {
-    try {
-      const response = await this.makeRequest<IUser>(`/user/delete/${userId}`, {
-        method: "DELETE",
-      });
-      // Clear per-user cached data
-      try {
-        const allKeys = await AsyncStorage.getAllKeys();
-        const keysToRemove = allKeys.filter(
-          (k) =>
-            k.startsWith(`transactions:${userId}:`) ||
-            k.startsWith(`budgets:${userId}:`),
-        );
-        if (keysToRemove.length > 0)
-          await AsyncStorage.multiRemove(keysToRemove);
-      } catch (e) {
-        // ignore
-      }
-      await AsyncStorage.multiRemove(["authToken", "userData"]);
-
-      return response;
-    } catch (error: any) {
-      console.error("Account deletion failed:", error.message);
-      throw error;
-    }
+    const response = await this.makeRequest<IUser>(`/user/delete/${userId}`, {
+      method: "DELETE",
+    });
+    await clearUserStorage(userId);
+    return response;
   }
 
   async uploadProfilePictureById(
     userId: string,
     imageFile: any,
   ): Promise<IApiResponse<IUser>> {
-    try {
-      const formData = new FormData();
+    const formData = new FormData();
+    formData.append("profilePicture", imageFile);
 
-      formData.append("profilePicture", imageFile);
+    const response = await apiClient.post(`/user/${userId}/upload`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
 
-      const response = await apiClient.post(
-        `/user/${userId}/upload`,
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        },
+    if (response?.data?.data) {
+      await AsyncStorage.setItem(
+        "userData",
+        JSON.stringify(response.data.data),
       );
-
-      console.log("Upload response:", response.data);
-
-      const currentStoredUser = await AsyncStorage.getItem("userData");
-      console.log("Current stored user before upload:", currentStoredUser);
-
-      if (response?.data?.data) {
-        await AsyncStorage.setItem(
-          "userData",
-          JSON.stringify(response.data.data),
-        );
-      } else {
-        console.error("Upload response missing user object", response?.data);
-      }
-
-      return response.data;
-    } catch (error: any) {
-      console.error("Upload profile picture by ID failed:", error.message);
-      throw error;
     }
+
+    return response.data;
   }
 
   async deleteProfilePictureById(userId: string): Promise<IApiResponse<IUser>> {
-    try {
-      const response = await this.makeRequest<IUser>(
-        `/user/${userId}/profile-picture`,
-        {
-          method: "DELETE",
-        },
-      );
+    const response = await this.makeRequest<IUser>(
+      `/user/${userId}/profile-picture`,
+      { method: "DELETE" },
+    );
 
-      // Update stored user if returned
-      if (response?.data) {
-        try {
-          await AsyncStorage.setItem("userData", JSON.stringify(response.data));
-        } catch (e) {
-          // ignore storage errors
-        }
+    if (response?.data) {
+      try {
+        await AsyncStorage.setItem("userData", JSON.stringify(response.data));
+      } catch {
+        // ignore storage errors
       }
-
-      return response;
-    } catch (error: any) {
-      console.error("Delete profile picture failed:", error.message);
-      throw error;
     }
+
+    return response;
   }
 
   async changePassword(payload: {
@@ -178,29 +112,17 @@ class UserAPI extends BaseAPI {
     newPassword: string;
     confirmPassword: string;
   }): Promise<IApiResponse<any>> {
-    try {
-      const response = await this.makeRequest<any>(`/user/change-password`, {
-        method: "POST",
-        data: payload,
-      });
-      return response;
-    } catch (error: any) {
-      console.error("Change password failed:", error.message);
-      throw error;
-    }
+    return this.makeRequest<any>("/user/change-password", {
+      method: "POST",
+      data: payload,
+    });
   }
 
   async forgotPassword(email: { email: string }): Promise<IApiResponse<any>> {
-    try {
-      const response = await this.makeRequest<any>(`/user/forgot-password`, {
-        method: "POST",
-        data: email,
-      });
-      return response;
-    } catch (error: any) {
-      console.error("Forgot password failed:", error.message);
-      throw error;
-    }
+    return this.makeRequest<any>("/user/forgot-password", {
+      method: "POST",
+      data: email,
+    });
   }
 
   async resetPassword(payload: {
@@ -210,47 +132,34 @@ class UserAPI extends BaseAPI {
     confirmPassword?: string;
     verifyOnly?: boolean;
   }): Promise<IApiResponse<any>> {
-    try {
-      const response = await this.makeRequest<any>(`/user/reset-password`, {
-        method: "POST",
-        data: payload,
-      });
-      return response;
-    } catch (error: any) {
-      console.error("Reset password failed:", error.message);
-      throw error;
-    }
+    return this.makeRequest<any>("/user/reset-password", {
+      method: "POST",
+      data: payload,
+    });
   }
 
   async updateCurrency(currency: string): Promise<IApiResponse<IUser>> {
-    try {
-      const response = await this.makeRequest<IUser>("/user/currency", {
-        method: "PUT",
-        data: { currency },
-      });
+    const response = await this.makeRequest<IUser>("/user/currency", {
+      method: "PUT",
+      data: { currency },
+    });
 
-      // Update stored user with new currency
-      if (response?.data) {
-        try {
-          await AsyncStorage.setItem("userData", JSON.stringify(response.data));
-        } catch (e) {
-          // ignore storage errors
-        }
+    if (response?.data) {
+      try {
+        await AsyncStorage.setItem("userData", JSON.stringify(response.data));
+      } catch {
+        // ignore storage errors
       }
-
-      return response;
-    } catch (error: any) {
-      console.error("Update currency failed:", error.message);
-      throw error;
     }
+
+    return response;
   }
 
   // Utility Methods
   async getStoredToken(): Promise<string | null> {
     try {
       return await AsyncStorage.getItem("authToken");
-    } catch (error) {
-      console.error("Failed to get stored token:", error);
+    } catch {
       return null;
     }
   }
@@ -259,8 +168,7 @@ class UserAPI extends BaseAPI {
     try {
       const userData = await AsyncStorage.getItem("userData");
       return userData ? JSON.parse(userData) : null;
-    } catch (error) {
-      console.error("Failed to get stored user:", error);
+    } catch {
       return null;
     }
   }

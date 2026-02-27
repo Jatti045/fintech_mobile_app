@@ -1,288 +1,42 @@
-import {
-  Text,
-  View,
-  Image,
-  TouchableOpacity,
-  ScrollView,
-  Switch,
-  ActivityIndicator,
-  Modal,
-  TextInput,
-  FlatList,
-  RefreshControl,
-} from "react-native";
+import React from "react";
+import { View, Text, ScrollView, RefreshControl } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
-import { useState, useEffect, useCallback } from "react";
-import * as ImagePicker from "expo-image-picker";
-import { useAppDispatch, useAppSelector, useAuth } from "@/hooks/useRedux";
-import {
-  deleteUserAccount,
-  logoutUser,
-  uploadProfilePicture,
-  deleteProfilePicture,
-  changePassword,
-  updateUserCurrency,
-  loadUserFromStorage,
-} from "@/store/slices/userSlice";
-import ModalCloseButton from "@/components/global/modalCloseButton";
-import { router } from "expo-router";
+
+import { useProfile } from "@/hooks/profile/useProfile";
+import { DEFAULT_CURRENCY } from "@/constants/Currencies";
 import Loader from "@/utils/loader";
-import { useTheme } from "@/hooks/useRedux";
-import { setTheme } from "@/store/slices/themeSlice";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useThemedAlert } from "@/utils/themedAlert";
+
 import {
-  CURRENCIES,
-  getCurrencyByCode,
-  DEFAULT_CURRENCY,
-} from "@/constants/Currencies";
-import { clearRatesCache } from "@/utils/currencyConverter";
+  ProfileHeader,
+  ThemeSwitcher,
+  CurrencySelector,
+  SettingsList,
+  ChangePasswordModal,
+  CurrencyPickerModal,
+  BankConnections,
+} from "@/components/profile";
 
 export default function ProfileScreen() {
-  const [uploading, setUploading] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const dispatch = useAppDispatch();
-  const { user, error } = useAuth();
-  const { THEME, selectedTheme } = useTheme();
-  const { showAlert } = useThemedAlert();
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      await dispatch(loadUserFromStorage());
-    } finally {
-      setRefreshing(false);
-    }
-  }, [dispatch]);
-
-  // Show error alerts for Redux state errors
-  useEffect(() => {
-    if (error) {
-      showAlert({ title: "Error", message: error });
-    }
-  }, [error]);
-
-  const settingsItems = [
-    {
-      title: "Log Out",
-      icon: "log-out-outline",
-      onPress: () => handleLogout(),
-    },
-    {
-      title: "Change Password",
-      icon: "key-outline",
-      onPress: () => setChangeOpen(true),
-    },
-    {
-      title: "Delete Account",
-      icon: "chevron-forward",
-      onPress: () => handleDeleteAccount(),
-      isDestructive: true,
-    },
-  ];
-
-  const [changeOpen, setChangeOpen] = useState(false);
-  const [currencyPickerOpen, setCurrencyPickerOpen] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [pwSaving, setPwSaving] = useState(false);
-
-  const closeChangeModal = (open: boolean) => {
-    // when closing, clear inputs
-    if (!open) {
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-    }
-    setChangeOpen(open);
-  };
-
-  // Handler for picking and uploading image
-  const handlePickImage = async () => {
-    // Request permission
-    const permissionResult =
-      await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permissionResult.granted) {
-      showAlert({
-        title: "Permission Required",
-        message: "Permission to access gallery is required!",
-      });
-      return;
-    }
-    // Pick image (use MediaType array per new API)
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-    });
-
-    if (!result.canceled && user?.id) {
-      const image = result.assets ? result.assets[0] : result;
-
-      const imageFile = {
-        uri: image.uri,
-        type: image?.mimeType || "image/jpeg",
-        name: image?.fileName || "profile.jpg",
-      };
-
-      try {
-        setUploading(true);
-        const resultAction = await dispatch(
-          uploadProfilePicture({ userId: user.id, imageFile }),
-        );
-
-        if (uploadProfilePicture.fulfilled.match(resultAction)) {
-          router.push("/(tabs)/profile");
-          /* Alert.alert("Success", "Profile picture uploaded successfully!"); */
-        } else if (uploadProfilePicture.rejected.match(resultAction)) {
-          showAlert({
-            title: "Upload Failed",
-            message:
-              (resultAction.payload as string) ||
-              "Failed to upload profile picture",
-          });
-        }
-      } catch (error) {
-        showAlert({
-          title: "Upload Failed",
-          message: "An unexpected error occurred",
-        });
-      } finally {
-        setUploading(false);
-      }
-    }
-  };
-
-  const handleLogout = () => {
-    showAlert({
-      title: "Confirm Logout",
-      message: "Are you sure you want to log out?",
-      buttons: [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Log Out",
-          style: "destructive",
-          onPress: () => dispatch(logoutUser()),
-        },
-      ],
-    });
-  };
-
-  const handleDeleteAccount = () => {
-    showAlert({
-      title: "Confirm Delete Account",
-      message: "Are you sure you want to delete your account?",
-      buttons: [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Delete Account",
-          style: "destructive",
-          onPress: () => {
-            // Second layer of protection: irreversible warning
-            setTimeout(() => {
-              showAlert({
-                title: "Delete Account — Irreversible",
-                message:
-                  "This action is permanent. Once you delete your account, all your data will be lost and cannot be recovered. Are you absolutely sure you want to continue?",
-                buttons: [
-                  { text: "Cancel", style: "cancel" },
-                  {
-                    text: "Delete Account",
-                    style: "destructive",
-                    onPress: async () => {
-                      if (user?.id) {
-                        const response = await dispatch(
-                          deleteUserAccount(user.id),
-                        );
-
-                        const { success, message } = response.payload as {
-                          success: boolean;
-                          message: string;
-                        };
-                        if (success) {
-                          showAlert({
-                            title: "Account Deleted",
-                            message:
-                              "Your account has been deleted successfully.",
-                          });
-                          router.push("/login");
-                        } else {
-                          showAlert({
-                            title: "Deletion Failed",
-                            message: message || "Failed to delete account.",
-                          });
-                        }
-                      }
-                    },
-                  },
-                ],
-              });
-            }, 400);
-          },
-        },
-      ],
-    });
-  };
-
-  const handleThemeSelect = async (themeName: string) => {
-    dispatch(setTheme(themeName));
-    await AsyncStorage.setItem("selectedTheme", themeName);
-    showAlert({
-      title: "Theme Changed",
-      message: `Theme changed to ${themeName}`,
-    });
-  };
-
-  const handleDeleteImage = async () => {
-    showAlert({
-      title: "Delete Profile Picture",
-      message: "Are you sure you want to delete your profile picture?",
-      buttons: [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            if (!user?.id) return;
-            try {
-              setDeleting(true);
-              const res: any = await dispatch(deleteProfilePicture(user.id));
-
-              if (deleteProfilePicture.fulfilled.match(res)) {
-                showAlert({
-                  title: "Deleted",
-                  message: "Profile picture deleted.",
-                });
-              } else {
-                showAlert({
-                  title: "Deletion Failed",
-                  message:
-                    (res.payload as string) ||
-                    "Failed to delete profile picture",
-                });
-              }
-            } catch (e: any) {
-              showAlert({
-                title: "Deletion Failed",
-                message: e?.message || "Failed to delete profile picture",
-              });
-            } finally {
-              setDeleting(false);
-            }
-          },
-        },
-      ],
-    });
-  };
+  const {
+    user,
+    THEME,
+    selectedTheme,
+    uploading,
+    deleting,
+    refreshing,
+    onRefresh,
+    handlePickImage,
+    handleDeleteImage,
+    handleThemeSelect,
+    currencyPickerOpen,
+    setCurrencyPickerOpen,
+    handleCurrencySelect,
+    changeOpen,
+    closeChangeModal,
+    handleChangePassword,
+    pwSaving,
+    settingsItems,
+  } = useProfile();
 
   return (
     <SafeAreaView
@@ -302,117 +56,16 @@ export default function ProfileScreen() {
           />
         }
       >
-        {/* Header */}
-        <View className="items-center justify-center mt-4 mb-8">
-          <Text
-            style={{ color: THEME.textPrimary }}
-            className="text-2xl font-bold"
-          >
-            Profile
-          </Text>
-          <View style={{ width: 24 }} />
-        </View>
+        <ProfileHeader
+          THEME={THEME}
+          user={user}
+          uploading={uploading}
+          deleting={deleting}
+          onPickImage={handlePickImage}
+          onDeleteImage={handleDeleteImage}
+        />
 
-        {/* Profile Section */}
-        <View className="items-center mb-8">
-          <View className="relative mb-4">
-            <LinearGradient
-              colors={[THEME.primary, THEME.secondary]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={{
-                width: 120,
-                height: 120,
-                borderRadius: 60,
-                padding: 3,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <View
-                style={{
-                  width: 114,
-                  height: 114,
-                  borderRadius: 57,
-                  backgroundColor: THEME.surface,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  overflow: "hidden",
-                }}
-              >
-                {user?.profilePic ? (
-                  <TouchableOpacity
-                    onPress={handlePickImage}
-                    onLongPress={handleDeleteImage}
-                  >
-                    <Image
-                      source={{ uri: user.profilePic }}
-                      style={{ width: 108, height: 108, borderRadius: 54 }}
-                    />
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity
-                    onPress={handlePickImage}
-                    style={{
-                      width: 108,
-                      height: 108,
-                      borderRadius: 54,
-                      backgroundColor: THEME.textSecondary + "33", // greyed out
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <Ionicons
-                      name="camera"
-                      size={48}
-                      color={THEME.textSecondary}
-                    />
-                  </TouchableOpacity>
-                )}
-              </View>
-            </LinearGradient>
-          </View>
-
-          <Text
-            style={{ color: THEME.textPrimary }}
-            className="text-2xl font-bold mb-2"
-          >
-            {user?.username || "Your Name"}
-          </Text>
-          <Text style={{ color: THEME.textSecondary }} className="text-base">
-            {user?.email || "your.email@email.com"}
-          </Text>
-        </View>
-
-        {/* Bank Connections (Coming Soon) */}
-        <View className="mb-8">
-          <Text
-            style={{ color: THEME.textPrimary }}
-            className="text-xl font-bold mb-4"
-          >
-            Bank Connections
-          </Text>
-
-          <View
-            style={{ backgroundColor: THEME.surface }}
-            className="p-6 rounded-xl"
-          >
-            <Text style={{ color: THEME.textPrimary, fontWeight: "700" }}>
-              Coming soon
-            </Text>
-            <Text style={{ color: THEME.textSecondary, marginTop: 8 }}>
-              Bank linking will be available in a future update. When released,
-              you'll be able to securely connect your bank accounts to import
-              transactions automatically, reconcile balances, and categorize
-              spending.
-            </Text>
-            <Text style={{ color: THEME.textSecondary, marginTop: 12 }}>
-              For now, you can manually add transactions and budgets. We will
-              announce bank connections and secure integrations in the app
-              release notes.
-            </Text>
-          </View>
-        </View>
+        <BankConnections THEME={THEME} />
 
         {/* Settings */}
         <View className="mb-8">
@@ -423,485 +76,42 @@ export default function ProfileScreen() {
             Settings
           </Text>
 
-          <View
-            style={{ backgroundColor: THEME.surface }}
-            className="p-4 rounded-xl mb-3"
-          >
-            <Text
-              style={{ color: THEME.textPrimary }}
-              className="font-medium text-base mb-2"
-            >
-              Theme
-            </Text>
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "center",
-                alignItems: "center",
-              }}
-            >
-              {[
-                { name: "Light", color: "#B8942F", icon: "sunny-outline" },
-                { name: "Dark", color: "#D4AF6A", icon: "moon-outline" },
-                { name: "Ocean", color: "#0EA5E9", icon: "water-outline" },
-                { name: "Rose", color: "#EB6F92", icon: "rose-outline" },
-              ].map((themeOption) => (
-                <TouchableOpacity
-                  key={themeOption.name}
-                  activeOpacity={0.85}
-                  onPress={() => handleThemeSelect(themeOption.name)}
-                  style={{
-                    alignItems: "center",
-                    justifyContent: "center",
-                    paddingVertical: 10,
-                    paddingHorizontal: 8,
-                    borderRadius: 12,
-                    borderWidth: selectedTheme === themeOption.name ? 2.5 : 1,
-                    borderColor:
-                      selectedTheme === themeOption.name
-                        ? THEME.primary
-                        : "#e0e0e0",
-                    backgroundColor: THEME.surface,
-                    marginHorizontal: 4,
-                    shadowColor:
-                      selectedTheme === themeOption.name
-                        ? THEME.primary
-                        : "#000",
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity:
-                      selectedTheme === themeOption.name ? 0.18 : 0.05,
-                    shadowRadius: 4,
-                    elevation: selectedTheme === themeOption.name ? 3 : 0,
-                    width: 72,
-                  }}
-                >
-                  <View
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 16,
-                      backgroundColor: themeOption.color,
-                      alignItems: "center",
-                      justifyContent: "center",
-                      marginBottom: 6,
-                      borderWidth: 1,
-                      borderColor: "#eee",
-                    }}
-                  >
-                    <Ionicons
-                      name={themeOption.icon as any}
-                      size={18}
-                      color={THEME.textPrimary}
-                    />
-                  </View>
-                  <Text
-                    style={{
-                      color:
-                        selectedTheme === themeOption.name
-                          ? THEME.primary
-                          : THEME.textPrimary,
-                      fontWeight:
-                        selectedTheme === themeOption.name ? "bold" : "500",
-                      fontSize: 13,
-                      letterSpacing: 0.2,
-                    }}
-                  >
-                    {themeOption.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
+          <ThemeSwitcher
+            THEME={THEME}
+            selectedTheme={selectedTheme}
+            onThemeSelect={handleThemeSelect}
+          />
 
-          {/* Currency Selector */}
-          <TouchableOpacity
-            activeOpacity={0.85}
+          <CurrencySelector
+            THEME={THEME}
+            userCurrency={user?.currency || DEFAULT_CURRENCY}
             onPress={() => setCurrencyPickerOpen(true)}
-            style={{ backgroundColor: THEME.surface }}
-            className="p-4 rounded-xl mb-3"
-          >
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}
-            >
-              <View>
-                <Text
-                  style={{ color: THEME.textPrimary }}
-                  className="font-medium text-base mb-1"
-                >
-                  Default Currency
-                </Text>
-                <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-                >
-                  <Text style={{ fontSize: 18 }}>
-                    {
-                      getCurrencyByCode(user?.currency || DEFAULT_CURRENCY)
-                        ?.flag
-                    }
-                  </Text>
-                  <Text style={{ color: THEME.textSecondary }}>
-                    {user?.currency || DEFAULT_CURRENCY} —{" "}
-                    {
-                      getCurrencyByCode(user?.currency || DEFAULT_CURRENCY)
-                        ?.name
-                    }
-                  </Text>
-                </View>
-              </View>
-              <Ionicons
-                name="chevron-forward"
-                size={20}
-                color={THEME.textSecondary}
-              />
-            </View>
-          </TouchableOpacity>
+          />
 
-          {/* Other Settings */}
-          {settingsItems.map((item, index) => (
-            <TouchableOpacity
-              key={index}
-              onPress={item.onPress}
-              style={{ backgroundColor: THEME.surface }}
-              className="flex-row items-center justify-between p-4 rounded-xl mb-3"
-            >
-              <Text
-                className="font-medium text-base"
-                style={{
-                  color: item.isDestructive ? THEME.danger : THEME.textPrimary,
-                }}
-              >
-                {item.title}
-              </Text>
-              <Ionicons
-                name={item.icon as any}
-                size={20}
-                color={item.isDestructive ? THEME.danger : THEME.textSecondary}
-              />
-            </TouchableOpacity>
-          ))}
+          <SettingsList THEME={THEME} items={settingsItems} />
         </View>
       </ScrollView>
 
-      {/* Change Password Modal */}
-      {changeOpen && (
-        <Modal
-          visible={changeOpen}
-          animationType="slide"
-          transparent={true}
-          presentationStyle="pageSheet"
-        >
-          <SafeAreaView
-            style={{
-              flex: 1,
-              backgroundColor: THEME.background,
-              padding: 18,
-              position: "relative",
-            }}
-          >
-            {/* close button (top-right) will clear inputs via closeChangeModal */}
-            <View className="relative mb-4">
-              <ModalCloseButton setOpenSheet={closeChangeModal} />
-            </View>
+      {/* Modals */}
+      <ChangePasswordModal
+        THEME={THEME}
+        visible={changeOpen}
+        onClose={closeChangeModal}
+        onSubmit={handleChangePassword}
+        saving={pwSaving}
+      />
 
-            <View style={{ alignItems: "center", marginTop: 12 }}>
-              <Text
-                style={{
-                  color: THEME.textPrimary,
-                  fontSize: 18,
-                  fontWeight: "700",
-                }}
-              >
-                Change Password
-              </Text>
-            </View>
+      <CurrencyPickerModal
+        THEME={THEME}
+        visible={currencyPickerOpen}
+        userCurrency={user?.currency || DEFAULT_CURRENCY}
+        onSelect={handleCurrencySelect}
+        onClose={() => setCurrencyPickerOpen(false)}
+      />
 
-            <ScrollView
-              style={{ marginTop: 18 }}
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={{ marginBottom: 12 }}>
-                <Text style={{ color: THEME.textSecondary, marginBottom: 6 }}>
-                  Current Password
-                </Text>
-                <TextInput
-                  secureTextEntry
-                  value={currentPassword}
-                  onChangeText={setCurrentPassword}
-                  placeholder="Current password"
-                  placeholderTextColor={THEME.placeholderText}
-                  style={{
-                    backgroundColor: THEME.inputBackground,
-                    color: THEME.textPrimary,
-                    padding: 12,
-                    borderRadius: 8,
-                  }}
-                />
-              </View>
-
-              <View style={{ marginBottom: 12 }}>
-                <Text style={{ color: THEME.textSecondary, marginBottom: 6 }}>
-                  New Password
-                </Text>
-                <TextInput
-                  secureTextEntry
-                  value={newPassword}
-                  onChangeText={setNewPassword}
-                  placeholder="New password"
-                  placeholderTextColor={THEME.placeholderText}
-                  style={{
-                    backgroundColor: THEME.inputBackground,
-                    color: THEME.textPrimary,
-                    padding: 12,
-                    borderRadius: 8,
-                  }}
-                />
-              </View>
-
-              <View style={{ marginBottom: 12 }}>
-                <Text style={{ color: THEME.textSecondary, marginBottom: 6 }}>
-                  Confirm New Password
-                </Text>
-                <TextInput
-                  secureTextEntry
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  placeholder="Confirm new password"
-                  placeholderTextColor={THEME.placeholderText}
-                  style={{
-                    backgroundColor: THEME.inputBackground,
-                    color: THEME.textPrimary,
-                    padding: 12,
-                    borderRadius: 8,
-                  }}
-                />
-              </View>
-
-              <View style={{ marginTop: 12 }}>
-                <TouchableOpacity
-                  activeOpacity={0.9}
-                  onPress={async () => {
-                    // Basic validation
-                    if (!currentPassword || !newPassword || !confirmPassword) {
-                      showAlert({ title: "Please fill all fields" });
-                      return;
-                    }
-                    if (newPassword !== confirmPassword) {
-                      showAlert({ title: "New passwords do not match" });
-                      return;
-                    }
-                    setPwSaving(true);
-                    try {
-                      const response: any = await dispatch(
-                        changePassword({
-                          currentPassword,
-                          newPassword,
-                          confirmPassword,
-                        }),
-                      );
-                      if (changePassword.fulfilled.match(response)) {
-                        showAlert({
-                          title: "Success",
-                          message:
-                            response.payload?.message || "Password changed",
-                        });
-                        closeChangeModal(false);
-                      } else {
-                        const err =
-                          response.payload ||
-                          response.error?.message ||
-                          "Failed to change password";
-                        showAlert({ title: "Error", message: err });
-                      }
-                    } catch (e: any) {
-                      showAlert({
-                        title: "Error",
-                        message: e?.message || "Failed to change password",
-                      });
-                    } finally {
-                      setPwSaving(false);
-                    }
-                  }}
-                >
-                  <LinearGradient
-                    colors={[THEME.primary, THEME.secondary]}
-                    start={[0, 0]}
-                    end={[1, 1]}
-                    style={{
-                      padding: 14,
-                      borderRadius: 8,
-                      alignItems: "center",
-                    }}
-                  >
-                    {pwSaving ? (
-                      <ActivityIndicator color={THEME.textPrimary} />
-                    ) : (
-                      <Text
-                        style={{ color: THEME.textPrimary, fontWeight: "700" }}
-                      >
-                        Update Password
-                      </Text>
-                    )}
-                  </LinearGradient>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-          </SafeAreaView>
-        </Modal>
-      )}
-
-      {/* Full-screen loading overlay during upload */}
+      {/* Full-screen loading overlays */}
       {uploading && <Loader msg="Uploading..." />}
       {deleting && <Loader msg="Deleting..." />}
-
-      {/* Currency Picker Modal */}
-      {currencyPickerOpen && (
-        <Modal
-          visible={currencyPickerOpen}
-          animationType="slide"
-          transparent={true}
-        >
-          <View
-            style={{
-              flex: 1,
-              backgroundColor: "rgba(0,0,0,0.5)",
-              justifyContent: "flex-end",
-            }}
-          >
-            <View
-              style={{
-                backgroundColor: THEME.background,
-                borderTopLeftRadius: 20,
-                borderTopRightRadius: 20,
-                maxHeight: "70%",
-                paddingBottom: 30,
-              }}
-            >
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: 16,
-                  borderBottomWidth: 1,
-                  borderBottomColor: THEME.border,
-                }}
-              >
-                <Text
-                  style={{
-                    color: THEME.textPrimary,
-                    fontSize: 18,
-                    fontWeight: "700",
-                  }}
-                >
-                  Select Default Currency
-                </Text>
-                <TouchableOpacity onPress={() => setCurrencyPickerOpen(false)}>
-                  <Ionicons name="close" size={24} color={THEME.textPrimary} />
-                </TouchableOpacity>
-              </View>
-
-              <FlatList
-                data={CURRENCIES}
-                keyExtractor={(item) => item.code}
-                renderItem={({ item }) => {
-                  const isSelected =
-                    item.code === (user?.currency || DEFAULT_CURRENCY);
-                  return (
-                    <TouchableOpacity
-                      onPress={async () => {
-                        if (isSelected) {
-                          setCurrencyPickerOpen(false);
-                          return;
-                        }
-                        setCurrencyPickerOpen(false);
-                        try {
-                          const result = await dispatch(
-                            updateUserCurrency(item.code),
-                          );
-                          if (updateUserCurrency.fulfilled.match(result)) {
-                            clearRatesCache();
-                            showAlert({
-                              title: "Currency Updated",
-                              message: `Default currency changed to ${item.code} (${item.name})`,
-                            });
-                          } else {
-                            showAlert({
-                              title: "Error",
-                              message:
-                                (result.payload as string) ||
-                                "Failed to update currency",
-                            });
-                          }
-                        } catch (e: any) {
-                          showAlert({
-                            title: "Error",
-                            message: e?.message || "Failed to update currency",
-                          });
-                        }
-                      }}
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        padding: 14,
-                        paddingHorizontal: 20,
-                        backgroundColor: isSelected
-                          ? THEME.primary + "20"
-                          : "transparent",
-                        borderBottomWidth: 0.5,
-                        borderBottomColor: THEME.border,
-                      }}
-                    >
-                      <Text style={{ fontSize: 22, marginRight: 12 }}>
-                        {item.flag}
-                      </Text>
-                      <View style={{ flex: 1 }}>
-                        <Text
-                          style={{
-                            color: THEME.textPrimary,
-                            fontWeight: isSelected ? "700" : "500",
-                            fontSize: 15,
-                          }}
-                        >
-                          {item.code}{" "}
-                          <Text
-                            style={{
-                              color: THEME.textSecondary,
-                              fontWeight: "400",
-                            }}
-                          >
-                            — {item.name}
-                          </Text>
-                        </Text>
-                      </View>
-                      <Text
-                        style={{
-                          color: THEME.textSecondary,
-                          fontSize: 16,
-                          fontWeight: "600",
-                        }}
-                      >
-                        {item.symbol}
-                      </Text>
-                      {isSelected && (
-                        <Ionicons
-                          name="checkmark-circle"
-                          size={20}
-                          color={THEME.primary}
-                          style={{ marginLeft: 8 }}
-                        />
-                      )}
-                    </TouchableOpacity>
-                  );
-                }}
-              />
-            </View>
-          </View>
-        </Modal>
-      )}
     </SafeAreaView>
   );
 }

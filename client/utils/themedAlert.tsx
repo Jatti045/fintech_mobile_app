@@ -3,6 +3,7 @@ import React, {
   useContext,
   useState,
   useRef,
+  useEffect,
   ReactNode,
 } from "react";
 import {
@@ -14,6 +15,7 @@ import {
   Dimensions,
 } from "react-native";
 import { useTheme } from "@/hooks/useRedux";
+import { registerAlertRef, unregisterAlertRef } from "@/config/apiErrorHandler";
 
 interface AlertButton {
   text: string;
@@ -56,6 +58,13 @@ export const AlertProvider = ({ children }: { children: ReactNode }) => {
     setAlertOptions(options);
     setVisible(true);
   };
+
+  // Register showAlert with the centralised API error handler so that Axios
+  // interceptors (which run outside the React tree) can trigger themed alerts.
+  useEffect(() => {
+    registerAlertRef(showAlert);
+    return () => unregisterAlertRef();
+  }, []);
 
   const hideAlert = () => {
     setVisible(false);

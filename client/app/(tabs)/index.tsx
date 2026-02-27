@@ -18,6 +18,9 @@ import QuickActions from "@/components/home/QuickActions";
 import BudgetSummary from "@/components/home/BudgetSummary";
 import RecentTransactions from "@/components/home/RecentTransactions";
 import TipOfTheDay from "@/components/home/TipOfTheDay";
+import BudgetHealthScore from "@/components/home/BudgetHealthScore";
+import SpendingTrends from "@/components/home/SpendingTrends";
+import CategoryComparison from "@/components/home/CategoryComparison";
 import {
   useTheme,
   useTransactions,
@@ -182,8 +185,17 @@ export default function Index() {
         {/* Budget summary cards with progress bars for each category */}
         <BudgetSummary />
 
+        {/* Budget health score gauge (0–100) */}
+        <BudgetHealthScore />
+
         {/* Chart showing top spending categories for the month, with bars colored by budget ratio */}
         <TopCategoriesChart label="Top Categories" totals={categoryTotals} />
+
+        {/* Category spend vs. last month comparison */}
+        <CategoryComparison categoryTotals={categoryTotals} />
+
+        {/* Bar chart showing spending totals for the last 6 months */}
+        <SpendingTrends />
 
         {/* List of 5 most recent transactions across all months */}
         <RecentTransactions transactions={recentTransactions} />

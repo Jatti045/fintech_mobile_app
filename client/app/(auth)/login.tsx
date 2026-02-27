@@ -10,7 +10,7 @@ import {
   Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Link, router } from "expo-router";
@@ -23,6 +23,7 @@ import {
   clearLoginError,
 } from "@/store/slices/userSlice";
 import { useThemedAlert } from "@/utils/themedAlert";
+import { validateLoginForm } from "@/utils/validation";
 import { forgotPassword } from "@/store/slices/userSlice";
 import ForgotPasswordModal from "@/components/login/ForgotPasswordModal";
 import OTPModal from "@/components/login/OTPModal";
@@ -49,47 +50,40 @@ const LoginScreen = () => {
   const [forgotEmail, setForgotEmail] = useState("");
   const [currentOtp, setCurrentOtp] = useState("");
   const [pendingForgotEmail, setPendingForgotEmail] = useState<string | null>(
-    null
+    null,
   );
 
-  const validateEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
+  // When the forgot-password modal closes and there's a pending email,
+  // transition to the OTP modal. Previously this was an IIFE inside JSX
+  // which triggered setState during render — now it's a proper effect.
+  useEffect(() => {
+    if (pendingForgotEmail && !isModalVisible) {
+      setForgotEmail(pendingForgotEmail);
+      setOtpModalVisible(true);
+      setTimeout(() => {
+        showAlert({
+          title: "If an account exists, an OTP was sent to your email.",
+        });
+      }, 300);
+      setPendingForgotEmail(null);
+    }
+  }, [pendingForgotEmail, isModalVisible]);
 
   const handleLogin = async () => {
     dispatch(clearLoginError());
 
     try {
-      // Validation
-      if (!email.trim() || !password.trim()) {
-        showAlert({
-          title: "Validation Error",
-          message: "Please fill in all fields",
-        });
-        return;
-      }
-
-      if (!validateEmail(email)) {
-        showAlert({
-          title: "Validation Error",
-          message: "Please enter a valid email address",
-        });
-        return;
-      }
-
-      if (password.length < 6) {
-        showAlert({
-          title: "Validation Error",
-          message: "Password must be at least 6 characters",
-        });
+      // Shared validation
+      const check = validateLoginForm(email, password);
+      if (!check.valid) {
+        showAlert({ title: "Validation Error", message: check.message });
         return;
       }
 
       const normalizedEmail = email.trim().toLowerCase();
       // Dispatch login action
       const response = await dispatch(
-        loginUser({ email: normalizedEmail, password })
+        loginUser({ email: normalizedEmail, password }),
       ).unwrap();
 
       // Debugging log
@@ -338,22 +332,6 @@ const LoginScreen = () => {
           setModalVisible(false);
         }}
       />
-
-      {/* When the forgot modal actually closes, open OTP modal and show generic OTP message */}
-      {pendingForgotEmail &&
-        !isModalVisible &&
-        (() => {
-          // open modal and clear pending
-          setForgotEmail(pendingForgotEmail);
-          setOtpModalVisible(true);
-          setTimeout(() => {
-            showAlert({
-              title: "If an account exists, an OTP was sent to your email.",
-            });
-          }, 300);
-          setPendingForgotEmail(null);
-          return null;
-        })()}
 
       <OTPModal
         visible={otpModalVisible}
