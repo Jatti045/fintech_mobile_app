@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, TouchableOpacity } from "react-native";
-import { useTheme } from "@/hooks/useRedux";
+import { useBudgets, useTheme } from "@/hooks/useRedux";
 import { formatDate, capitalizeFirst, formatCurrency } from "@/utils/helper";
 import { safeAmount } from "../../utils/transaction/helpers";
 import type { TransactionItem } from "../../types/transaction/types";
@@ -19,7 +19,17 @@ const TransactionRow = React.memo(function TransactionRow({
   onDelete: (id: string) => void;
 }) {
   const { THEME } = useTheme();
+  const budgets = useBudgets();
   const amt = safeAmount(tx.amount);
+
+  const displayCategory = useMemo(() => {
+    if (tx.budgetId) {
+      const linked = budgets.find((b) => b.id === tx.budgetId);
+      if (linked) return linked.category;
+    }
+
+    return tx.category;
+  }, [tx.budgetId, tx.category, budgets]);
 
   return (
     <TouchableOpacity
@@ -40,7 +50,7 @@ const TransactionRow = React.memo(function TransactionRow({
             numberOfLines={1}
             ellipsizeMode="tail"
           >
-            {capitalizeFirst(tx.category)}
+            {capitalizeFirst(displayCategory)}
           </Text>
           <Text
             style={{ color: THEME.textSecondary }}
