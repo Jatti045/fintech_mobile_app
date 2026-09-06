@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
@@ -33,8 +34,8 @@ import tools.jackson.databind.JsonNode;
  * {@code kid}.
  *
  * <p>
- * Verification is optional per Plaid's documentation but strongly recommended:
- * the webhook endpoint is public, and this prevents forged webhooks from
+ * Mandatory cryptographic verification is enforced on all incoming webhooks:
+ * the endpoint is public, and verification prevents forged webhooks from
  * triggering syncs or deleting local items. The raw request body is hashed
  * exactly as delivered to avoid whitespace-normalization mismatches.
  * </p>
@@ -67,12 +68,14 @@ public class PlaidWebhookVerificationService {
 
     /**
      * Verifies a Plaid webhook signature. Returns {@code false} for any
-     * missing, malformed, stale or tampered input. The caller decides what to
-     * do when the {@code Plaid-Verification} header is absent entirely.
+     * missing, malformed, stale or tampered input.
      */
     public boolean verify(String signedJwt, String rawBody) {
+        if (!StringUtils.hasText(signedJwt) || rawBody == null) {
+            return false;
+        }
         try {
-            SignedJWT jwt = SignedJWT.parse(signedJwt);
+            SignedJWT jwt = SignedJWT.parse(signedJwt.trim());
             JWSHeader header = jwt.getHeader();
 
             // Plaid signs webhooks with ES256 only; reject anything else.
@@ -81,12 +84,12 @@ public class PlaidWebhookVerificationService {
                 return false;
             }
             String keyId = header.getKeyID();
-            if (keyId == null) {
+            if (!StringUtils.hasText(keyId)) {
                 logger.warn("Plaid webhook rejected: JWT header missing kid");
                 return false;
             }
 
-            ECKey verificationKey = resolveVerificationKey(keyId);
+            ECKey verificationKey = resolveVerificationKey(keyId.trim());
             if (verificationKey == null) {
                 logger.warn("Plaid webhook rejected: no verification key available for kid={}", keyId);
                 return false;
@@ -99,18 +102,22 @@ public class PlaidWebhookVerificationService {
             JWTClaimsSet claims = jwt.getJWTClaimsSet();
             Date issuedAt = claims.getIssueTime();
             if (issuedAt == null
-                    || Math.abs(Instant.now().getEpochSecond() - issuedAt.toInstant().getEpochSecond())
-                            > MAX_WEBHOOK_AGE_SECONDS) {
+                    || Math.abs(Instant.now().getEpochSecond()
+                            - issuedAt.toInstant().getEpochSecond()) > MAX_WEBHOOK_AGE_SECONDS) {
                 logger.warn("Plaid webhook rejected: JWT iat missing or outside the 5 minute window");
                 return false;
             }
 
             String claimedHash = claims.getStringClaim("request_body_sha256");
-            if (claimedHash == null) {
+            if (!StringUtils.hasText(claimedHash)) {
                 logger.warn("Plaid webhook rejected: JWT missing request_body_sha256");
                 return false;
             }
-            byte[] claimedBytes = decodeHex(claimedHash);
+            byte[] claimedBytes = decodeHex(claimedHash.trim());
+            if (claimedBytes.length != 32) {
+                logger.warn("Plaid webhook rejected: request_body_sha256 claim is not a valid 32-byte hex string");
+                return false;
+            }
             byte[] actualBytes = sha256(rawBody);
             if (!MessageDigest.isEqual(claimedBytes, actualBytes)) {
                 logger.warn("Plaid webhook rejected: request body hash mismatch");

@@ -78,6 +78,22 @@ class PlaidWebhookVerificationServiceTest {
     }
 
     @Test
+    void verify_nullJwt_returnsFalse() {
+        assertFalse(service.verify(null, "{}"));
+    }
+
+    @Test
+    void verify_blankJwt_returnsFalse() {
+        assertFalse(service.verify("   ", "{}"));
+    }
+
+    @Test
+    void verify_nullBody_returnsFalse() throws Exception {
+        String body = "{}";
+        assertFalse(service.verify(sign(claimsFor(body)).serialize(), null));
+    }
+
+    @Test
     void verify_tamperedBody_returnsFalse() throws Exception {
         String body = "{\"webhook_type\":\"TRANSACTIONS\",\"webhook_code\":\"SYNC_UPDATES_AVAILABLE\"}";
         assertFalse(service.verify(sign(claimsFor(body)).serialize(), "{\"webhook_type\":\"TRANSACTIONS\"}"));
@@ -98,7 +114,88 @@ class PlaidWebhookVerificationServiceTest {
         assertFalse(service.verify(sign(stale).serialize(), body));
     }
 
-    /** Service subclass that serves a fixed verification key instead of calling Plaid. */
+    @Test
+    void verify_futureJwt_returnsFalse() throws Exception {
+        String body = "{}";
+        JWTClaimsSet future = new JWTClaimsSet.Builder()
+                .issueTime(new Date(System.currentTimeMillis() + 10 * 60 * 1000L))
+                .claim("request_body_sha256", sha256Hex(body))
+                .build();
+        assertFalse(service.verify(sign(future).serialize(), body));
+    }
+
+    @Test
+    void verify_missingIat_returnsFalse() throws Exception {
+        String body = "{}";
+        JWTClaimsSet noIat = new JWTClaimsSet.Builder()
+                .claim("request_body_sha256", sha256Hex(body))
+                .build();
+        assertFalse(service.verify(sign(noIat).serialize(), body));
+    }
+
+    @Test
+    void verify_missingKid_returnsFalse() throws Exception {
+        String body = "{}";
+        SignedJWT jwt = new SignedJWT(
+                new JWSHeader.Builder(JWSAlgorithm.ES256).build(),
+                claimsFor(body));
+        jwt.sign(new ECDSASigner(privateKey));
+        assertFalse(service.verify(jwt.serialize(), body));
+    }
+
+    @Test
+    void verify_blankKid_returnsFalse() throws Exception {
+        String body = "{}";
+        SignedJWT jwt = new SignedJWT(
+                new JWSHeader.Builder(JWSAlgorithm.ES256).keyID("   ").build(),
+                claimsFor(body));
+        jwt.sign(new ECDSASigner(privateKey));
+        assertFalse(service.verify(jwt.serialize(), body));
+    }
+
+    @Test
+    void verify_unknownKid_returnsFalse() throws Exception {
+        String body = "{}";
+        SignedJWT jwt = new SignedJWT(
+                new JWSHeader.Builder(JWSAlgorithm.ES256).keyID("unknown-kid").build(),
+                claimsFor(body));
+        jwt.sign(new ECDSASigner(privateKey));
+        assertFalse(service.verify(jwt.serialize(), body));
+    }
+
+    @Test
+    void verify_missingRequestBodyHashClaim_returnsFalse() throws Exception {
+        String body = "{}";
+        JWTClaimsSet noHash = new JWTClaimsSet.Builder()
+                .issueTime(new Date())
+                .build();
+        assertFalse(service.verify(sign(noHash).serialize(), body));
+    }
+
+    @Test
+    void verify_invalidHexRequestBodyHash_returnsFalse() throws Exception {
+        String body = "{}";
+        JWTClaimsSet invalidHex = new JWTClaimsSet.Builder()
+                .issueTime(new Date())
+                .claim("request_body_sha256", "not-hex-chars-!!")
+                .build();
+        assertFalse(service.verify(sign(invalidHex).serialize(), body));
+    }
+
+    @Test
+    void verify_truncatedHexRequestBodyHash_returnsFalse() throws Exception {
+        String body = "{}";
+        JWTClaimsSet shortHex = new JWTClaimsSet.Builder()
+                .issueTime(new Date())
+                .claim("request_body_sha256", "abcd1234ef")
+                .build();
+        assertFalse(service.verify(sign(shortHex).serialize(), body));
+    }
+
+    /**
+     * Service subclass that serves a fixed verification key instead of calling
+     * Plaid.
+     */
     private static final class TestPlaidWebhookVerificationService extends PlaidWebhookVerificationService {
         private final JsonNode keyNode;
 
@@ -109,7 +206,7 @@ class PlaidWebhookVerificationServiceTest {
 
         @Override
         protected JsonNode requestVerificationKey(String keyId) {
-            return keyNode;
+            return KID.equals(keyId) ? keyNode : null;
         }
     }
 }

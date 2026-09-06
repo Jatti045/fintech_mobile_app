@@ -164,26 +164,30 @@ public class PlaidController {
      * /transactions/sync work is dispatched asynchronously.
      *
      * <p>
-     * When Plaid attaches the {@code Plaid-Verification} JWT it is verified
-     * against Plaid's published key (signature, age and body hash) before the
-     * payload is trusted. Webhooks without the header are logged and still
-     * processed, matching Plaid's guidance that verification is optional.
+     * Every incoming request must provide a valid {@code Plaid-Verification}
+     * JWT signed by Plaid. The signature, age (within 5 minutes), and body hash
+     * are cryptographically verified before the payload is parsed or trusted.
+     * Requests without a valid verification header are rejected immediately
+     * with 401 Unauthorized.
      * </p>
      */
-    @PostMapping({"/webhook", "/webhook/"})
+    @PostMapping({ "/webhook", "/webhook/" })
     public ResponseEntity<Map<String, Object>> handleWebhook(
             @RequestBody String rawBody,
             @RequestHeader(value = PLAID_VERIFICATION_HEADER, required = false) String verificationHeader) {
         if (!StringUtils.hasText(verificationHeader)) {
-            logger.warn("Plaid webhook received without {} header; skipping signature verification",
-                    PLAID_VERIFICATION_HEADER);
-        } else if (!webhookVerificationService.verify(verificationHeader, rawBody)) {
+            logger.warn("Plaid webhook rejected: missing {} header", PLAID_VERIFICATION_HEADER);
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Plaid webhook verification header missing");
+        }
+        if (!webhookVerificationService.verify(verificationHeader, rawBody)) {
+            logger.warn("Plaid webhook rejected: signature verification failed");
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Plaid webhook verification failed");
         }
 
         Map<String, Object> payload;
         try {
-            payload = objectMapper.readValue(rawBody, new TypeReference<Map<String, Object>>() { });
+            payload = objectMapper.readValue(rawBody, new TypeReference<Map<String, Object>>() {
+            });
         } catch (JacksonException ex) {
             // Malformed payload — dead-letter and ack 200 so Plaid does not retry.
             logger.error("Received malformed Plaid webhook payload; dead-lettering: {}", ex.getMessage());
