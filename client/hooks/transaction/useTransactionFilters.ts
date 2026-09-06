@@ -11,6 +11,28 @@ type FilterState = {
   maxAmount: string;
 };
 
+const UTC_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const UTC_MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+export function toUtcDateString(dateInput: string | Date): string {
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return "Unknown Date";
+  return `${UTC_DAYS[d.getUTCDay()]} ${UTC_MONTHS[d.getUTCMonth()]} ${String(d.getUTCDate()).padStart(2, "0")} ${d.getUTCFullYear()}`;
+}
+
 /**
  * Derives the filtered + grouped transaction data that feeds into the
  * SectionList on the Transactions screen.
@@ -80,7 +102,7 @@ export function useTransactionFilters(
     const groups: Record<string, TransactionItem[]> = {};
 
     for (const t of filteredTransactions) {
-      const dayKey = new Date(t.date).toDateString();
+      const dayKey = toUtcDateString(t.date);
       (groups[dayKey] ??= []).push(t as TransactionItem);
     }
 

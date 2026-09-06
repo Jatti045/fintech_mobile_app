@@ -85,11 +85,11 @@ describe("calendarSlice – nextMonth", () => {
     const now = new Date();
     // Already at the current month – nextMonth should be a no-op
     const s = calendarReducer(
-      state(now.getMonth(), now.getFullYear()),
+      state(now.getUTCMonth(), now.getUTCFullYear()),
       nextMonth(),
     );
-    expect(s.month).toBe(now.getMonth());
-    expect(s.year).toBe(now.getFullYear());
+    expect(s.month).toBe(now.getUTCMonth());
+    expect(s.year).toBe(now.getUTCFullYear());
   });
 
   it("61. blocks navigation to a future year", () => {
@@ -98,9 +98,9 @@ describe("calendarSlice – nextMonth", () => {
     // only if December IS the current month; if we're not in December this
     // test uses the current month on the current year (which is always blocked).
     const s = calendarReducer(
-      state(now.getMonth(), now.getFullYear()),
+      state(now.getUTCMonth(), now.getUTCFullYear()),
       nextMonth(),
     );
-    expect(s.year).toBe(now.getFullYear());
+    expect(s.year).toBe(now.getUTCFullYear());
   });
 });

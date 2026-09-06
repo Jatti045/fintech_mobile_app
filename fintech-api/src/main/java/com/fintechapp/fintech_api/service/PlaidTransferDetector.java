@@ -6,41 +6,73 @@ import tools.jackson.databind.JsonNode;
  * Decides whether a raw Plaid transaction is an internal transfer that must be
  * excluded from income and expense calculations.
  *
- * <p><b>The only transfer rule.</b> A transaction is a transfer only when it
- * moves money between two accounts that both belong to the same user at the
- * same financial institution. Every other money movement is either income
- * (money in) or an expense (money out).</p>
+ * <p>
+ * <b>The internal transfer invariant:</b> A transaction is an internal transfer
+ * only when it moves existing money between two distinct accounts that both
+ * belong
+ * to the same user at the same financial institution (Plaid item). Every other
+ * money
+ * movement is either genuine income (money entering the user's net worth) or an
+ * expense (money leaving the user's net worth).
+ * </p>
  *
- * <p><b>Why this always returns {@code false} today.</b> Proving the transfer
- * rule requires knowing which Plaid account each transaction belongs to and
- * which financial institution (Plaid item) that account is part of. The
- * application's persisted model does not retain that information:</p>
+ * <p>
+ * <b>Two-Phase Detection Architecture:</b>
+ * </p>
  * <ul>
- *   <li>transactions do not store {@code account_id} nor a {@code plaid_item_id}
- *       (the column was intentionally removed from the schema);</li>
- *   <li>there is no account entity and no account-to-item mapping;</li>
- *   <li>Plaid's categories ({@code TRANSFER_IN}/{@code TRANSFER_OUT},
- *       {@code TRANSFER_ACCOUNT_TRANSFER}, {@code LOAN_PAYMENTS}, ...) describe
- *       the <em>category</em> of a movement, not the <em>ownership</em> of the
- *       accounts involved, and also cover Venmo/PayPal P2P payments, cash
- *       deposits, wire transfers and external loan payments — none of which are
- *       internal transfers.</li>
+ * <li><b>Phase 1 (Ingest-time stateless evaluation):</b> At initial transaction
+ * ingest,
+ * {@link #isTransfer(JsonNode)} evaluates each raw Plaid transaction node in
+ * isolation.
+ * Because a single transaction node does not carry its paired opposite leg or
+ * cross-account
+ * ownership proof, it always returns {@code false}. This ensures no incoming
+ * transaction
+ * is prematurely suppressed before account ownership can be proven.</li>
+ * <li><b>Phase 2 (Post-sync stateful reconciliation):</b> Following
+ * synchronization,
+ * {@code PlaidTransactionIngestService#reconcileInternalTransfers} executes a
+ * proof-based
+ * reconciliation over persisted transactions for the user and Plaid item. It
+ * pairs
+ * opposite-direction movements (income + expense) that share an exact
+ * integer-cent amount,
+ * occur on the same UTC calendar day, belong to different accounts under the
+ * same Plaid item,
+ * and exhibit verified transfer category codes.</li>
  * </ul>
  *
- * <p>Using those categories as evidence caused real external money movements
- * (P2P receipts, cash deposits, transfers between the user's accounts at
- * different banks) to be wrongly excluded from income/expense. Because account
- * ownership cannot be proven from the available data, the safe behavior is to
- * classify nothing as a transfer: money in is income, money out is an expense,
- * and no transaction is wrongly hidden from the user's financial totals.</p>
- *
- * <p><b>What information is missing to enable real detection:</b> persist each
- * transaction's {@code account_id} and its Plaid item, plus an
- * account-to-item mapping, so two legs can be proven to belong to the same
- * user's accounts at the same institution. Credit card payments can then be
- * recognized as internal transfers only when that ownership is established
- * (same user, same institution). Until then, a credit card payment is treated
- * as an expense, and no heuristic is invented to guess ownership.</p>
+ * <p>
+ * <b>Known Detection Limitation: Multi-Day Settlement Windows:</b>
+ * </p>
+ * <p>
+ * Plaid's {@code /transactions/sync} payload does not provide an authoritative
+ * cross-institution
+ * or intra-bank transfer pair identifier. Transfers between accounts (such as
+ * ACH or inter-account
+ * sweeps) frequently settle across 1 to 3 business days, resulting in differing
+ * posting dates.
+ * Loosening the date matching window across multiple days was evaluated and
+ * intentionally rejected
+ * due to unacceptable false-positive risks:
+ * <ul>
+ * <li>Expanding the window across multiple days causes unrelated same-amount
+ * transactions
+ * (e.g., recurring subscriptions, bill payments, ATM withdrawals, or paycheck
+ * splits)
+ * to be erroneously matched as transfers.</li>
+ * <li>Erronous transfer classification permanently erases real income and real
+ * expenses from
+ * the user's budget, cash flow, and monthly summary metrics.</li>
+ * <li>In accounting systems, a false negative (showing both legs of a multi-day
+ * transfer until
+ * reconciled) is vastly preferable to a false positive (silently destroying
+ * genuine financial records).</li>
+ * </ul>
+ * Therefore, multi-day settlement is retained as a documented known detection
+ * limitation, and the
+ * algorithm strictly enforces same-day proof-based pairing.
+ * </p>
  */
 public final class PlaidTransferDetector {
 

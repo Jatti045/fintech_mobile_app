@@ -19,7 +19,7 @@ export { safeAmount };
  * Number of days in the given month (local calendar).
  */
 export function daysInMonth(month: number, year: number): number {
-  return new Date(year, month + 1, 0).getDate();
+  return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
 }
 
 /**
@@ -71,7 +71,8 @@ export function buildMonthSpendSeries(
   for (const tx of transactions) {
     if (!tx.date) continue;
     const d = new Date(tx.date);
-    if (d.getMonth() !== opts.month || d.getFullYear() !== opts.year) continue;
+    if (d.getUTCMonth() !== opts.month || d.getUTCFullYear() !== opts.year)
+      continue;
 
     const matches = opts.budgetId
       ? String(tx.budgetId || "") === opts.budgetId
@@ -81,7 +82,7 @@ export function buildMonthSpendSeries(
     if (!matches) continue;
 
     const cents = Math.round(safeAmount(tx.amount) * 100);
-    byDay[d.getDate()] = (byDay[d.getDate()] || 0) + cents;
+    byDay[d.getUTCDate()] = (byDay[d.getUTCDate()] || 0) + cents;
   }
 
   const series: SpendSeriesPoint[] = [];

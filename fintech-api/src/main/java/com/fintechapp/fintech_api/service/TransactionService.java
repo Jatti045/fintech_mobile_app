@@ -190,12 +190,23 @@ public class TransactionService {
         Instant transactionDate = parseTransactionDate(request.date());
         TransactionType type = parseType(request.type());
 
-        int month = request.month() != null
-                ? request.month()
-                : LocalDate.ofInstant(transactionDate, ZoneOffset.UTC).getMonthValue() - 1;
-        int year = request.year() != null
-                ? request.year()
-                : LocalDate.ofInstant(transactionDate, ZoneOffset.UTC).getYear();
+        LocalDate txLocalDate = LocalDate.ofInstant(transactionDate, ZoneOffset.UTC);
+        int txMonth = txLocalDate.getMonthValue() - 1;
+        int txYear = txLocalDate.getYear();
+
+        if (request.month() != null && request.month() != txMonth) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Transaction month (" + request.month() + ") does not match transaction date (" + txMonth + ")");
+        }
+        if (request.year() != null && request.year() != txYear) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Transaction year (" + request.year() + ") does not match transaction date (" + txYear + ")");
+        }
+
+        int month = txMonth;
+        int year = txYear;
 
         Instant monthStart = monthStart(year, month);
         Instant nextMonthStart = nextMonthStart(year, month);

@@ -84,12 +84,12 @@ const monthTags = <
   return tags;
 };
 
-/** Derive the month a transaction date falls in. */
+/** Derive the month a transaction date falls in (UTC accounting domain). */
 export const monthOfDate = (date?: string | Date | null): MonthKey | null => {
   if (!date) return null;
   const d = new Date(date);
   if (isNaN(d.getTime())) return null;
-  return { year: d.getFullYear(), month: d.getMonth() };
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth() };
 };
 
 const toError = (e: any) => ({

@@ -54,7 +54,7 @@ export function buildDailySpendTotals(
   month: number,
   year: number,
 ): { day: number; total: number }[] {
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
   const byDay: Record<number, number> = {};
 
   for (const tx of transactions) {
@@ -64,10 +64,10 @@ export function buildDailySpendTotals(
     if (tx.isTransfer) continue;
 
     const d = new Date(tx.date);
-    if (d.getMonth() !== month || d.getFullYear() !== year) continue;
+    if (d.getUTCMonth() !== month || d.getUTCFullYear() !== year) continue;
 
     const cents = Math.round(safeAmount(tx.amount) * 100);
-    byDay[d.getDate()] = (byDay[d.getDate()] || 0) + cents;
+    byDay[d.getUTCDate()] = (byDay[d.getUTCDate()] || 0) + cents;
   }
 
   const series: { day: number; total: number }[] = [];

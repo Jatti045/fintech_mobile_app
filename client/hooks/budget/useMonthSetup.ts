@@ -46,7 +46,8 @@ export const useMonthSetup = ({
   const { showAlert } = useThemedAlert();
   const [edits, setEdits] = useState<EditableSuggestion[]>([]);
   const [applying, setApplying] = useState(false);
-  const initializedRef = useRef(false);
+  const currentKey = `${year}-${month}`;
+  const lastInitializedKeyRef = useRef<string | null>(null);
 
   const query = useGetBudgetSuggestionsQuery(
     { currentMonth: month, currentYear: year },
@@ -54,16 +55,31 @@ export const useMonthSetup = ({
   );
 
   // Populate the editable rows when the modal opens AND authoritative data has
-  // arrived. Resets between sessions so stale edits never carry over.
+  // arrived for the active month/year. Resets between sessions and when month/year
+  // changes so stale edits never leak across months or sessions.
   useEffect(() => {
     if (!open) {
-      initializedRef.current = false;
+      lastInitializedKeyRef.current = null;
+      setEdits([]);
       return;
     }
-    if (!initializedRef.current) {
+
+    // Reset when month or year changes while modal remains open
+    if (
+      lastInitializedKeyRef.current !== null &&
+      lastInitializedKeyRef.current !== currentKey
+    ) {
+      lastInitializedKeyRef.current = null;
+      setEdits([]);
+    }
+
+    const isCurrentMonthData = Boolean(
+      query.data && query.data.month === month && query.data.year === year,
+    );
+    if (isCurrentMonthData && lastInitializedKeyRef.current !== currentKey) {
       const data = query.data?.suggestions;
-      if (!data) return; // still loading / not yet fetched
-      initializedRef.current = true;
+      if (!data) return;
+      lastInitializedKeyRef.current = currentKey;
       setEdits(
         data.map((s) => ({
           ...s,
@@ -72,26 +88,35 @@ export const useMonthSetup = ({
         })),
       );
     }
-  }, [open, query.data]);
+  }, [open, currentKey, month, year, query.data]);
 
   const [applyMutation] = useApplyBudgetSuggestionsMutation();
 
-  const suggestions = query.data?.suggestions ?? null;
+  const isCurrentMonthData = Boolean(
+    query.data && query.data.month === month && query.data.year === year,
+  );
+  const suggestions = isCurrentMonthData
+    ? (query.data?.suggestions ?? null)
+    : null;
   const error =
     query.error && typeof query.error === "object" && "error" in query.error
       ? String((query.error as any).error)
       : null;
-  const isLoading = query.isFetching && edits.length === 0;
+  const isLoading =
+    (query.isFetching || (open && !isCurrentMonthData && !error)) &&
+    edits.length === 0;
   const isEmpty =
     !isLoading &&
     !error &&
-    !!query.data &&
+    isCurrentMonthData &&
     suggestions !== null &&
     suggestions.length === 0;
 
   const setLimit = useCallback((category: string, value: string) => {
     setEdits((prev) =>
-      prev.map((e) => (e.category === category ? { ...e, limitInput: value } : e)),
+      prev.map((e) =>
+        e.category === category ? { ...e, limitInput: value } : e,
+      ),
     );
   }, []);
 
@@ -117,7 +142,10 @@ export const useMonthSetup = ({
     const items = selectedEdits
       .map((e) => {
         const numeric = Number(e.limitInput.replace(/[^0-9.]/g, ""));
-        return { category: e.category, limit: Number.isFinite(numeric) ? numeric : 0 };
+        return {
+          category: e.category,
+          limit: Number.isFinite(numeric) ? numeric : 0,
+        };
       })
       .filter((i) => i.limit > 0 && i.category.trim().length > 0);
 
@@ -140,7 +168,9 @@ export const useMonthSetup = ({
       showAlert({
         title: "Could not apply budgets",
         message:
-          result.data?.message ?? result.error?.error ?? "Something went wrong. Please try again.",
+          result.data?.message ??
+          result.error?.error ??
+          "Something went wrong. Please try again.",
       });
     } catch (err: any) {
       showAlert({
@@ -150,7 +180,15 @@ export const useMonthSetup = ({
     } finally {
       setApplying(false);
     }
-  }, [applying, selectedEdits, applyMutation, month, year, onOpenChange, showAlert]);
+  }, [
+    applying,
+    selectedEdits,
+    applyMutation,
+    month,
+    year,
+    onOpenChange,
+    showAlert,
+  ]);
 
   return {
     suggestions,

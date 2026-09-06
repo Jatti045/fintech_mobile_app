@@ -14,24 +14,31 @@ export const useTransactionForm = () => {
 
   // Default to expense; the user can switch to income in the transaction modal.
   const [type, setType] = useState<TransactionType>(TransactionType.EXPENSE);
-  const monthStartDate = new Date(currentYear, currentMonth, 1);
+  const monthStartDate = new Date(Date.UTC(currentYear, currentMonth, 1));
   const today = new Date();
   const isCurrentMonth =
-    currentYear === today.getFullYear() && currentMonth === today.getMonth();
+    currentYear === today.getUTCFullYear() &&
+    currentMonth === today.getUTCMonth();
   const monthEndDate = isCurrentMonth
     ? new Date(
-        today.getFullYear(),
-        today.getMonth(),
-        today.getDate(),
-        23,
-        59,
-        59,
+        Date.UTC(
+          today.getUTCFullYear(),
+          today.getUTCMonth(),
+          today.getUTCDate(),
+          23,
+          59,
+          59,
+        ),
       )
-    : new Date(currentYear, currentMonth + 1, 0, 23, 59, 59);
+    : new Date(Date.UTC(currentYear, currentMonth + 1, 0, 23, 59, 59));
 
   const [txName, setTxName] = useState("");
   const [txAmount, setTxAmount] = useState("");
-  const [txDate, setTxDate] = useState(new Date());
+  const [txDate, setTxDate] = useState(
+    isCurrentMonth
+      ? new Date()
+      : new Date(Date.UTC(currentYear, currentMonth, 1, 12, 0, 0)),
+  );
   const [txSelectedCategoryAndId, setTxSelectedCategoryAndId] = useState({
     id: "",
     name: "",

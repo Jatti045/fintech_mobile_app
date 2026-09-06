@@ -6,8 +6,8 @@ export type { CalendarState };
 const now = new Date();
 
 const initialState: CalendarState = {
-  month: now.getMonth(),
-  year: now.getFullYear(),
+  month: now.getUTCMonth(),
+  year: now.getUTCFullYear(),
 };
 
 const calendarSlice = createSlice({
@@ -22,10 +22,10 @@ const calendarSlice = createSlice({
       state.year = action.payload.year;
     },
     nextMonth(state) {
-      // Get the current date
+      // Get the current date in UTC
       const now = new Date();
-      const currentMonth = now.getMonth();
-      const currentYear = now.getFullYear();
+      const currentMonth = now.getUTCMonth();
+      const currentYear = now.getUTCFullYear();
 
       // Calculate the next month
       let nextMonth = state.month;

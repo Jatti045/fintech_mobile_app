@@ -3,6 +3,7 @@ package com.fintechapp.fintech_api.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -80,7 +81,8 @@ class TransactionServiceTest {
                 user.setEmail("user@example.com");
                 user.setUsername("testuser");
                 user.setCurrency("USD");
-                lenient().when(currencyConversionService.convert(any(Double.class), any(String.class), any(String.class)))
+                lenient().when(currencyConversionService.convert(any(Double.class), any(String.class),
+                                any(String.class)))
                                 .thenAnswer(invocation -> invocation.getArgument(0));
         }
 
@@ -378,5 +380,88 @@ class TransactionServiceTest {
                 assertEquals("Groceries", existing.getCategory());
                 // 50.0 + (75.0 - 50.0) = +25 applied as an atomic database update.
                 verify(budgetRepository).incrementSpent("budget-a", 25.0);
+        }
+
+        @Test
+        void createTransaction_endOfMonth_boundToCurrentMonthBudget() {
+                Budget budgetMarch = new Budget();
+                budgetMarch.setId("budget-march");
+                budgetMarch.setCategory("Groceries");
+                budgetMarch.setLimit(500.0);
+                budgetMarch.setSpent(0.0);
+                budgetMarch.setDate(Instant.parse("2026-03-01T00:00:00Z"));
+                budgetMarch.setUser(user);
+
+                when(userRepository.findById("user-123")).thenReturn(Optional.of(user));
+                when(budgetRepository.findByIdAndUser_Id("budget-march", "user-123"))
+                                .thenReturn(Optional.of(budgetMarch));
+                when(transactionRepository.save(any(Transaction.class)))
+                                .thenAnswer(invocation -> invocation.getArgument(0));
+
+                // 23:59:59 on March 31 is still March in UTC (month index 2)
+                CreateTransactionRequest request = new CreateTransactionRequest(
+                                "Late Night Groceries", 2, 2026, "2026-03-31T23:59:59Z", "Groceries", "EXPENSE",
+                                45.0, null, "budget-march", null, "USD", 45.0);
+
+                TransactionDataResponse response = transactionService.createTransaction(authUser, request);
+                assertNotNull(response);
+                verify(budgetRepository).incrementSpent("budget-march", 45.0);
+                verify(cacheInvalidator).evictFinancialSummaryForDate("user-123",
+                                Instant.parse("2026-03-31T23:59:59Z"));
+        }
+
+        @Test
+        void createTransaction_startOfNextMonth_boundToNextMonthBudget() {
+                Budget budgetApril = new Budget();
+                budgetApril.setId("budget-april");
+                budgetApril.setCategory("Groceries");
+                budgetApril.setLimit(500.0);
+                budgetApril.setSpent(0.0);
+                budgetApril.setDate(Instant.parse("2026-04-01T00:00:00Z"));
+                budgetApril.setUser(user);
+
+                when(userRepository.findById("user-123")).thenReturn(Optional.of(user));
+                when(budgetRepository.findByIdAndUser_Id("budget-april", "user-123"))
+                                .thenReturn(Optional.of(budgetApril));
+                when(transactionRepository.save(any(Transaction.class)))
+                                .thenAnswer(invocation -> invocation.getArgument(0));
+
+                // 00:00:00 on April 1 is April in UTC (month index 3)
+                CreateTransactionRequest request = new CreateTransactionRequest(
+                                "Early Morning Coffee", 3, 2026, "2026-04-01T00:00:00Z", "Groceries", "EXPENSE",
+                                5.0, null, "budget-april", null, "USD", 5.0);
+
+                TransactionDataResponse response = transactionService.createTransaction(authUser, request);
+                assertNotNull(response);
+                verify(budgetRepository).incrementSpent("budget-april", 5.0);
+                verify(cacheInvalidator).evictFinancialSummaryForDate("user-123",
+                                Instant.parse("2026-04-01T00:00:00Z"));
+        }
+
+        @Test
+        void createTransaction_mismatchedMonthInRequest_throwsBadRequest() {
+                // Transaction date is April 1 01:00 UTC (month index 3), but request declares
+                // month 2 (March)
+                CreateTransactionRequest request = new CreateTransactionRequest(
+                                "Midnight Mismatch", 2, 2026, "2026-04-01T01:00:00Z", "Groceries", "EXPENSE",
+                                25.0, null, "budget-march", null, "USD", 25.0);
+
+                ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                                () -> transactionService.createTransaction(authUser, request));
+                assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+                assertTrue(ex.getReason().contains("does not match transaction date"));
+        }
+
+        @Test
+        void createTransaction_mismatchedYearInRequest_throwsBadRequest() {
+                // Transaction date is Jan 1 2026 UTC, but request declares year 2025
+                CreateTransactionRequest request = new CreateTransactionRequest(
+                                "New Year Mismatch", 0, 2025, "2026-01-01T01:00:00Z", "Groceries", "EXPENSE",
+                                25.0, null, "budget-2025", null, "USD", 25.0);
+
+                ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                                () -> transactionService.createTransaction(authUser, request));
+                assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+                assertTrue(ex.getReason().contains("does not match transaction date"));
         }
 }

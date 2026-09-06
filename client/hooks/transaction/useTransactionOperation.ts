@@ -33,7 +33,7 @@ const monthOfDate = (date?: string | Date | null): MonthKey | null => {
   if (!date) return null;
   const d = new Date(date);
   if (isNaN(d.getTime())) return null;
-  return { year: d.getFullYear(), month: d.getMonth() };
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth() };
 };
 
 /**
@@ -104,8 +104,8 @@ export const useTransactionOperations = () => {
 
       const payload: any = {
         name: txName.trim(),
-        month: calendar.month,
-        year: calendar.year,
+        month: txDate.getUTCMonth(),
+        year: txDate.getUTCFullYear(),
         date: txDate.toISOString(),
         category: txSelectedCategoryAndId.name || "Uncategorized",
         type,
