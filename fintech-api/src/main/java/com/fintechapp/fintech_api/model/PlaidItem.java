@@ -74,6 +74,20 @@ public class PlaidItem {
     @Column(name = "last_synced_at")
     private Instant lastSyncedAt;
 
+    /**
+     * Unique token identifying the execution instance currently holding the
+     * distributed sync lease for this item.
+     */
+    @Column(name = "sync_lock_token", length = 64)
+    private String syncLockToken;
+
+    /**
+     * Timestamp at which the current distributed sync lease expires.
+     * Prevents permanent deadlocks if a syncing instance crashes mid-run.
+     */
+    @Column(name = "sync_lock_expires_at")
+    private Instant syncLockExpiresAt;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;

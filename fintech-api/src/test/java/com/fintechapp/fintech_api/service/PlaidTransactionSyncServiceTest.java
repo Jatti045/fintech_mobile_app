@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -40,13 +41,16 @@ class PlaidTransactionSyncServiceTest {
     @Mock
     private PlaidService plaidService;
 
+    @Mock
+    private PlaidSyncLockService syncLockService;
+
     private PlaidTransactionSyncService service;
 
     private PlaidItem item;
 
     @BeforeEach
     void setUp() {
-        service = new PlaidTransactionSyncService(plaidItemRepository, plaidService);
+        service = new PlaidTransactionSyncService(plaidItemRepository, plaidService, syncLockService);
         User user = new User();
         user.setId("user-1");
         item = new PlaidItem();
@@ -56,6 +60,7 @@ class PlaidTransactionSyncServiceTest {
 
     private void stubItem() {
         when(plaidItemRepository.findByItemId("item-1")).thenReturn(Optional.of(item));
+        when(syncLockService.acquireWithTimeout(any(), any(), any(), any())).thenReturn(true);
     }
 
     // ── Missing item ─────────────────────────────────────────────────────────
@@ -198,5 +203,47 @@ class PlaidTransactionSyncServiceTest {
         }
 
         verify(plaidService, times(1)).fetchAndApplySyncPage("item-1");
+    }
+
+    // ── Distributed lock timeout ─────────────────────────────────────────────
+
+    @Test
+    void syncItemAsync_distributedLockFails_skipsSync() {
+        when(plaidItemRepository.findByItemId("item-1")).thenReturn(Optional.of(item));
+        when(syncLockService.acquireWithTimeout(any(), any(), any(), any())).thenReturn(false);
+
+        service.syncItemAsync("item-1");
+
+        verify(plaidService, never()).fetchAndApplySyncPage(any());
+        verify(syncLockService, never()).release(any(), any());
+    }
+
+    // ── Lock cleanup on exception ────────────────────────────────────────────
+
+    @Test
+    void syncItemAsync_syncThrowsException_releasesLockAndMarksError() {
+        stubItem();
+        when(plaidService.fetchAndApplySyncPage("item-1")).thenThrow(new RuntimeException("Plaid error"));
+
+        service.syncItemAsync("item-1");
+
+        verify(syncLockService).release(eq("item-1"), any());
+        assertTrue(item.isSyncError());
+        verify(plaidItemRepository).save(item);
+    }
+
+    // ── Multi-page lease extension ───────────────────────────────────────────
+
+    @Test
+    void syncItemAsync_multiPage_extendsLockLease() {
+        stubItem();
+        when(plaidService.fetchAndApplySyncPage("item-1"))
+                .thenReturn(new SyncPageResult("cursor-1", true))
+                .thenReturn(new SyncPageResult("cursor-2", false));
+
+        service.syncItemAsync("item-1");
+
+        verify(syncLockService, times(1)).extend(eq("item-1"), any(), any());
+        verify(syncLockService, times(1)).release(eq("item-1"), any());
     }
 }

@@ -1,5 +1,7 @@
 package com.fintechapp.fintech_api.service;
 
+import java.time.Duration;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
@@ -7,6 +9,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -20,14 +23,18 @@ import com.fintechapp.fintech_api.service.PlaidService.SyncPageResult;
  * immediate post-link sync both hand off to {@link #syncItemAsync(String)} so
  * the HTTP request/response cycle is never blocked by the sync work.
  *
- * <p>Sync runs for the <em>same</em> {@code item_id} are serialized by a
- * per-item in-process lock. Plaid can fire several webhooks for one update
- * within the same second, and concurrent runs would all read the same stale
- * cursor, re-fetch the same pages, and overwrite each other's cursor writes.
- * The lock guarantees thread 2 waits until thread 1 has finished persisting
- * every page and committed {@code next_cursor}. Cross-instance serialization
- * is additionally enforced by a pessimistic row lock on {@code plaid_items}
- * taken by {@link PlaidService#fetchAndApplySyncPage(String)} for every page.</p>
+ * <p>
+ * Sync runs for the <em>same</em> {@code item_id} are serialized across
+ * application instances using a two-tier locking strategy:
+ * <ol>
+ * <li>An in-process {@link ReentrantLock} per {@code item_id} that coordinates
+ * threads running within the same JVM without hitting the database.</li>
+ * <li>A distributed, atomic database lease on {@code plaid_items} with bounded
+ * expiration semantics managed by {@link PlaidSyncLockService} to coordinate
+ * across multiple JVM instances and prevent concurrent or duplicate sync
+ * loops.</li>
+ * </ol>
+ * </p>
  */
 @Service
 public class PlaidTransactionSyncService {
@@ -36,10 +43,7 @@ public class PlaidTransactionSyncService {
     private static final int MAX_PAGES_PER_RUN = 50;
 
     /**
-     * Per-item in-process mutex, keyed by Plaid {@code item_id}. Entries are
-     * intentionally never evicted: cardinality is bounded by the number of
-     * distinct Plaid items seen by this process and eviction races with
-     * in-flight waiters would defeat the locking guarantee.
+     * Per-item in-process mutex, keyed by Plaid {@code item_id}.
      */
     private static final ConcurrentMap<String, ReentrantLock> ITEM_LOCKS = new ConcurrentHashMap<>();
 
@@ -51,14 +55,32 @@ public class PlaidTransactionSyncService {
     @Value("${app.plaid.sync.item-lock-timeout-ms:30000}")
     private long itemLockTimeoutMs = 30_000L;
 
+    /**
+     * Lease duration for the distributed item lock. Must be sufficiently long
+     * to allow page processing while remaining bounded to prevent deadlocks on
+     * crash.
+     */
+    @Value("${app.plaid.sync.item-lock-lease-duration-ms:60000}")
+    private long itemLockLeaseDurationMs = 60_000L;
+
     private final PlaidItemRepository plaidItemRepository;
     private final PlaidService plaidService;
+    private final PlaidSyncLockService syncLockService;
 
     public PlaidTransactionSyncService(
             PlaidItemRepository plaidItemRepository,
             PlaidService plaidService) {
+        this(plaidItemRepository, plaidService, new PlaidSyncLockService(plaidItemRepository));
+    }
+
+    @Autowired
+    public PlaidTransactionSyncService(
+            PlaidItemRepository plaidItemRepository,
+            PlaidService plaidService,
+            PlaidSyncLockService syncLockService) {
         this.plaidItemRepository = plaidItemRepository;
         this.plaidService = plaidService;
+        this.syncLockService = syncLockService;
     }
 
     /**
@@ -73,22 +95,29 @@ public class PlaidTransactionSyncService {
             return;
         }
         String userId = item.getUser().getId();
+        String lockToken = UUID.randomUUID().toString();
+        Duration timeout = Duration.ofMillis(itemLockTimeoutMs);
+        Duration leaseDuration = Duration.ofMillis(Math.max(itemLockLeaseDurationMs, 30_000L));
 
-        // Step A — secure the exclusive per-item lock.
-        if (!acquireItemLock(itemId)) {
+        // Step A — secure the two-tier lock (local mutex + distributed lease).
+        if (!acquireItemLock(itemId, lockToken, timeout, leaseDuration)) {
             return;
         }
         try {
             boolean hasMore = true;
             int page = 0;
             while (hasMore && page < MAX_PAGES_PER_RUN) {
-                // Steps B–E live in fetchAndApplySyncPage: it re-reads the
-                // latest stored cursor under a pessimistic row lock, calls
-                // /transactions/sync with it, applies the payload, and commits
-                // next_cursor inside a single transaction.
+                // Steps B–E live in fetchAndApplySyncPage: it fetches Plaid HTTP
+                // outside the database transaction, then persists the page and
+                // cursor in a short dedicated transaction.
                 SyncPageResult result = plaidService.fetchAndApplySyncPage(itemId);
                 hasMore = result.hasMore();
                 page++;
+
+                // Extend distributed lease if there are more pages to process.
+                if (hasMore && syncLockService != null) {
+                    syncLockService.extend(itemId, lockToken, leaseDuration);
+                }
             }
             logger.debug("Plaid sync finished for item_id={} pages={} hasMore={}", itemId, page, hasMore);
             // The full run completed without an exception — surface health for
@@ -101,8 +130,8 @@ public class PlaidTransactionSyncService {
             // non-dismissible warning and offer a manual retry.
             markSyncError(itemId);
         } finally {
-            // Step F — release the lock.
-            releaseItemLock(itemId);
+            // Step F — release the distributed lease and local lock.
+            releaseItemLock(itemId, lockToken);
         }
     }
 
@@ -142,41 +171,54 @@ public class PlaidTransactionSyncService {
     }
 
     /**
-     * @return {@code true} when this thread owns the per-item lock, {@code false}
+     * Acquires both the JVM-local lock and the distributed lease for the item.
+     *
+     * @return {@code true} when this thread owns the lock, {@code false}
      *         when the lock could not be obtained (timeout/interrupt) and the
      *         run must be skipped.
      */
-    private boolean acquireItemLock(String itemId) {
-        ReentrantLock lock = ITEM_LOCKS.computeIfAbsent(itemId, k -> new ReentrantLock());
-
-        if (lock.tryLock()) {
-            logger.info("Acquired Plaid item lock for item_id={}", itemId);
-            return true;
-        }
-
-        logger.warn("Plaid item lock is held by another sync for item_id={}; waiting up to {}ms",
-                itemId, itemLockTimeoutMs);
-        boolean acquired;
+    private boolean acquireItemLock(String itemId, String lockToken, Duration timeout, Duration leaseDuration) {
+        ReentrantLock localLock = ITEM_LOCKS.computeIfAbsent(itemId, k -> new ReentrantLock());
+        long start = System.currentTimeMillis();
+        boolean localAcquired;
         try {
-            acquired = lock.tryLock(itemLockTimeoutMs, TimeUnit.MILLISECONDS);
+            localAcquired = localLock.tryLock(timeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            logger.warn("Interrupted while waiting for Plaid item lock for item_id={}", itemId);
+            logger.warn("Interrupted while waiting for local Plaid item lock for item_id={}", itemId);
             return false;
         }
-        if (acquired) {
-            logger.warn("Acquired Plaid item lock for item_id={} after waiting for the in-progress sync", itemId);
-            return true;
+
+        if (!localAcquired) {
+            logger.warn("Timed out waiting {}ms for local Plaid item lock for item_id={}; skipping this sync run",
+                    timeout.toMillis(), itemId);
+            return false;
         }
-        logger.warn("Timed out waiting {}ms for Plaid item lock for item_id={}; skipping this sync run "
-                + "(Plaid re-fires SYNC_UPDATES_AVAILABLE on the next change)", itemLockTimeoutMs, itemId);
-        return false;
+
+        long elapsed = System.currentTimeMillis() - start;
+        long remaining = Math.max(0, timeout.toMillis() - elapsed);
+
+        boolean distAcquired = syncLockService.acquireWithTimeout(itemId, lockToken, Duration.ofMillis(remaining),
+                leaseDuration);
+        if (!distAcquired) {
+            localLock.unlock();
+            return false;
+        }
+        return true;
     }
 
-    private void releaseItemLock(String itemId) {
-        ReentrantLock lock = ITEM_LOCKS.get(itemId);
-        if (lock != null) {
-            lock.unlock();
+    private void releaseItemLock(String itemId, String lockToken) {
+        try {
+            if (syncLockService != null && lockToken != null) {
+                syncLockService.release(itemId, lockToken);
+            }
+        } catch (Exception ex) {
+            logger.warn("Failed to release distributed sync lease for item_id={}: {}", itemId, ex.getMessage());
+        } finally {
+            ReentrantLock localLock = ITEM_LOCKS.get(itemId);
+            if (localLock != null && localLock.isHeldByCurrentThread()) {
+                localLock.unlock();
+            }
         }
     }
 }

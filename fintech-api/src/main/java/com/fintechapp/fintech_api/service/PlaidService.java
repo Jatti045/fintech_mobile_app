@@ -9,13 +9,20 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import java.util.Optional;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.SimpleTransactionStatus;
+import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -72,6 +79,29 @@ public class PlaidService {
     private final UserRepository userRepository;
     private final PlaidTransactionIngestService ingestService;
     private final FinancialCacheInvalidator cacheInvalidator;
+    private final TransactionTemplate transactionTemplate;
+
+    @Autowired
+    public PlaidService(
+            @Qualifier("plaidRestClient") RestClient plaidRestClient,
+            PlaidConfig.PlaidSettings settings,
+            EncryptionService encryptionService,
+            PlaidItemRepository plaidItemRepository,
+            UserRepository userRepository,
+            PlaidTransactionIngestService ingestService,
+            FinancialCacheInvalidator cacheInvalidator,
+            Optional<PlatformTransactionManager> transactionManager) {
+        this.plaidRestClient = plaidRestClient;
+        this.settings = settings;
+        this.encryptionService = encryptionService;
+        this.plaidItemRepository = plaidItemRepository;
+        this.userRepository = userRepository;
+        this.ingestService = ingestService;
+        this.cacheInvalidator = cacheInvalidator;
+        this.transactionTemplate = transactionManager != null && transactionManager.isPresent()
+                ? new TransactionTemplate(transactionManager.get())
+                : null;
+    }
 
     public PlaidService(
             @Qualifier("plaidRestClient") RestClient plaidRestClient,
@@ -81,13 +111,15 @@ public class PlaidService {
             UserRepository userRepository,
             PlaidTransactionIngestService ingestService,
             FinancialCacheInvalidator cacheInvalidator) {
-        this.plaidRestClient = plaidRestClient;
-        this.settings = settings;
-        this.encryptionService = encryptionService;
-        this.plaidItemRepository = plaidItemRepository;
-        this.userRepository = userRepository;
-        this.ingestService = ingestService;
-        this.cacheInvalidator = cacheInvalidator;
+        this(plaidRestClient, settings, encryptionService, plaidItemRepository, userRepository, ingestService,
+                cacheInvalidator, Optional.empty());
+    }
+
+    private <T> T inTransaction(TransactionCallback<T> action) {
+        if (transactionTemplate != null) {
+            return transactionTemplate.execute(action);
+        }
+        return action.doInTransaction(new SimpleTransactionStatus());
     }
 
     /**
@@ -154,18 +186,20 @@ public class PlaidService {
     /**
      * Fetches a single /transactions/sync page for the item, applies
      * added/modified/removed records idempotently, and advances the stored
-     * cursor — all inside one database transaction.
+     * cursor.
      *
-     * <p>Implements Plaid's cursor loop step by step: the item row is reloaded
-     * under a pessimistic write lock (Step B: the stored cursor is always the
-     * freshest committed value, even when another application instance synced
-     * concurrently), Plaid is called with that cursor (Step C), the payload is
-     * applied (Step D), and {@code next_cursor} is committed (Step E).</p>
+     * <p>
+     * The external Plaid HTTP call executes strictly outside any database
+     * transaction, without holding any row locks or database connections.
+     * The returned page is then persisted atomically within a short, dedicated
+     * database transaction.
+     * </p>
      */
-    @Transactional
     public SyncPageResult fetchAndApplySyncPage(String itemId) {
-        // Step B — lock the plaid_items row and read the last saved cursor.
-        PlaidItem item = plaidItemRepository.findByItemIdForUpdate(itemId)
+        // Step 1: Read cursor and decrypt access token outside of any database
+        // transaction.
+        PlaidItem item = plaidItemRepository.findByItemId(itemId)
+                .or(() -> plaidItemRepository.findByItemIdForUpdate(itemId))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Plaid item not found"));
         String cursor = item.getCursor();
         String userId = item.getUser().getId();
@@ -185,59 +219,57 @@ public class PlaidService {
             body.put("cursor", cursor);
         }
 
+        // Step 2: External Plaid HTTP call happens OUTSIDE of any database transaction.
         JsonNode response = post("/transactions/sync", body);
 
-        // `item` was loaded inside this transaction; load a managed User for
-        // the ingest work.
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found"));
-        List<String> removedIds = new ArrayList<>();
+        // Step 3: Persist the returned page in a short, dedicated database transaction.
+        return inTransaction(status -> {
+            PlaidItem managedItem = plaidItemRepository.findByItemIdForUpdate(itemId)
+                    .or(() -> plaidItemRepository.findByItemId(itemId))
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Plaid item not found"));
 
-        // The batch method reconciles pending transactions first (a posted
-        // transaction references its pending counterpart) and performs the
-        // reconnect fingerprint matching one-to-one within the batch.
-        List<PlaidTransaction> added = nodes(response, "added").stream()
-                .map(node -> toPlaidTransaction(node, item.getItemId()))
-                .toList();
-        List<PlaidTransaction> modified = nodes(response, "modified").stream()
-                .map(node -> toPlaidTransaction(node, item.getItemId()))
-                .toList();
-        ingestService.upsertAddedBatch(user, added);
-        for (PlaidTransaction plaidTx : modified) {
-            ingestService.upsertTransaction(user, plaidTx);
-        }
-        for (JsonNode node : nodes(response, "removed")) {
-            JsonNode txId = node.get("transaction_id");
-            if (txId != null && StringUtils.hasText(txId.asString())) {
-                removedIds.add(txId.asString());
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found"));
+            List<String> removedIds = new ArrayList<>();
+
+            List<PlaidTransaction> added = nodes(response, "added").stream()
+                    .map(node -> toPlaidTransaction(node, managedItem.getItemId()))
+                    .toList();
+            List<PlaidTransaction> modified = nodes(response, "modified").stream()
+                    .map(node -> toPlaidTransaction(node, managedItem.getItemId()))
+                    .toList();
+            ingestService.upsertAddedBatch(user, added);
+            for (PlaidTransaction plaidTx : modified) {
+                ingestService.upsertTransaction(user, plaidTx);
             }
-        }
-        if (!removedIds.isEmpty()) {
-            ingestService.removeByPlaidIds(removedIds, userId);
-        }
+            for (JsonNode node : nodes(response, "removed")) {
+                JsonNode txId = node.get("transaction_id");
+                if (txId != null && StringUtils.hasText(txId.asString())) {
+                    removedIds.add(txId.asString());
+                }
+            }
+            if (!removedIds.isEmpty()) {
+                ingestService.removeByPlaidIds(removedIds, userId);
+            }
 
-        String nextCursor = response.path("next_cursor").asString(null);
-        boolean hasMore = response.path("has_more").asBoolean(false);
-        // A committed page proves the sync pipeline works end-to-end: stamp the
-        // item as healthy so the clients can display "Last synced …" and
-        // suppress the sync-error warning (spec: clear syncError on success).
-        item.setCursor(StringUtils.hasText(nextCursor) ? nextCursor : item.getCursor());
-        item.setLastSyncedAt(Instant.now());
-        item.setSyncError(false);
-        plaidItemRepository.save(item);
+            String nextCursor = response.path("next_cursor").asString(null);
+            boolean hasMore = response.path("has_more").asBoolean(false);
 
-        logger.info("Plaid sync payload received for item_id={}: added={}, modified={}, removed={}, new_cursor={}",
-                itemId, added.size(), modified.size(), removedIds.size(), nextCursor);
+            managedItem.setCursor(StringUtils.hasText(nextCursor) ? nextCursor : managedItem.getCursor());
+            managedItem.setLastSyncedAt(Instant.now());
+            managedItem.setSyncError(false);
+            plaidItemRepository.save(managedItem);
 
-        // A sync page can touch any month of the user's history (initial
-        // imports span everything), so evict the user's whole summary region
-        // plus the recurring-payment detection after the successful ingest.
-        cacheInvalidator.evictFinancialSummaryRegion(userId);
-        cacheInvalidator.evictRecurringPayments(userId);
+            logger.info("Plaid sync payload received for item_id={}: added={}, modified={}, removed={}, new_cursor={}",
+                    itemId, added.size(), modified.size(), removedIds.size(), nextCursor);
 
-        registerCursorCommitMilestone(itemId, userId, cursor, item.getCursor());
+            cacheInvalidator.evictFinancialSummaryRegion(userId);
+            cacheInvalidator.evictRecurringPayments(userId);
 
-        return new SyncPageResult(item.getCursor(), hasMore);
+            registerCursorCommitMilestone(itemId, userId, cursor, managedItem.getCursor());
+
+            return new SyncPageResult(managedItem.getCursor(), hasMore);
+        });
     }
 
     /**
@@ -276,10 +308,12 @@ public class PlaidService {
      * Creates an <em>update-mode</em> Plaid Link token so the user can repair a
      * connection that needs re-authentication.
      *
-     * <p>Update mode re-uses the item's durable {@code access_token} and the
+     * <p>
+     * Update mode re-uses the item's durable {@code access_token} and the
      * request body deliberately omits a {@code products} array. The access
      * token does NOT change, so the client must NOT call
-     * {@code /item/public_token/exchange} after update mode completes.</p>
+     * {@code /item/public_token/exchange} after update mode completes.
+     * </p>
      */
     public String createUpdateLinkToken(AuthenticatedUser authenticatedUser, String itemId) {
         String userId = requireUserId(authenticatedUser);
@@ -302,8 +336,9 @@ public class PlaidService {
         if (StringUtils.hasText(settings.webhookUrl())) {
             body.put("webhook", settings.webhookUrl());
         } else {
-            logger.warn("PLAID_WEBHOOK_URL is not configured; update-mode link tokens are created WITHOUT a webhook URL "
-                    + "and Plaid will not send LOGIN_REPAIRED webhooks for the repaired item.");
+            logger.warn(
+                    "PLAID_WEBHOOK_URL is not configured; update-mode link tokens are created WITHOUT a webhook URL "
+                            + "and Plaid will not send LOGIN_REPAIRED webhooks for the repaired item.");
         }
 
         JsonNode response = post("/link/token/create", body);
@@ -465,7 +500,7 @@ public class PlaidService {
         // this transaction belongs to; the item id identifies the connected
         // financial institution. Both are persisted for ownership-based
         // transfer classification.
-                String plaidAccountId = node.path("account_id").asText(null);
+        String plaidAccountId = node.path("account_id").asText(null);
         String pfcDetailed = readPfcDetailed(node);
 
         return new PlaidTransaction(
