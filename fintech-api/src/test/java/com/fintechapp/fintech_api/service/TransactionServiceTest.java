@@ -33,6 +33,8 @@ import com.fintechapp.fintech_api.repository.BudgetRepository;
 import com.fintechapp.fintech_api.repository.TransactionRepository;
 import com.fintechapp.fintech_api.repository.UserRepository;
 
+import jakarta.persistence.EntityManager;
+
 @ExtendWith(MockitoExtension.class)
 class TransactionServiceTest {
 
@@ -51,6 +53,9 @@ class TransactionServiceTest {
         @Mock
         private CurrencyConversionService currencyConversionService;
 
+        @Mock
+        private EntityManager entityManager;
+
         private TransactionService transactionService;
 
         private AuthenticatedUser authUser;
@@ -64,6 +69,10 @@ class TransactionServiceTest {
                                 userRepository,
                                 cacheInvalidator,
                                 currencyConversionService);
+                // @PersistenceContext fields are not populated by plain `new`;
+                // inject the mock the same way the container would.
+                org.springframework.test.util.ReflectionTestUtils.setField(
+                                transactionService, "entityManager", entityManager);
 
                 authUser = new AuthenticatedUser("user-123", "user@example.com", 1234567890L);
                 user = new User();
@@ -122,11 +131,10 @@ class TransactionServiceTest {
                 // Verify budget reassignment and category synchronization
                 assertEquals("budget-b", existing.getBudget().getId());
                 assertEquals("Shopping", existing.getCategory());
-                assertEquals(0.0, budgetA.getSpent(), 0.001);
-                assertEquals(70.0, budgetB.getSpent(), 0.001);
-
-                verify(budgetRepository).save(budgetA);
-                verify(budgetRepository).save(budgetB);
+                // Budget spent adjustments are atomic database updates, not
+                // in-memory read-modify-write entity saves.
+                verify(budgetRepository).decrementSpent("budget-a", 50.0);
+                verify(budgetRepository).incrementSpent("budget-b", 50.0);
                 verify(transactionRepository).save(existing);
 
                 // Verify DTO contains both budgetId and category
@@ -178,8 +186,8 @@ class TransactionServiceTest {
                 // Raw source values are preserved for display/audit.
                 assertEquals(100.0, saved.getOriginalAmount(), 0.0001);
                 assertEquals("USD", saved.getOriginalCurrency());
-                // Budget spent aggregates the normalized amount.
-                assertEquals(125.0, budgetA.getSpent(), 0.0001);
+                // Budget spent is aggregated by an atomic database increment.
+                verify(budgetRepository).incrementSpent("budget-a", 125.0);
         }
 
         @Test
@@ -368,8 +376,7 @@ class TransactionServiceTest {
                 assertEquals("Weekly groceries", existing.getDescription());
                 assertEquals("budget-a", existing.getBudget().getId());
                 assertEquals("Groceries", existing.getCategory());
-                // 50.0 + (75.0 - 50.0) = 75.0
-                assertEquals(75.0, budgetA.getSpent(), 0.001);
-                verify(budgetRepository).save(budgetA);
+                // 50.0 + (75.0 - 50.0) = +25 applied as an atomic database update.
+                verify(budgetRepository).incrementSpent("budget-a", 25.0);
         }
 }

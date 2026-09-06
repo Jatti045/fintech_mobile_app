@@ -289,9 +289,8 @@ public class PlaidTransactionIngestService {
     /** Flips an expense/income into a transfer and reverses any budget contribution. */
     private void markAsTransfer(Transaction tx) {
         if (tx.getType() == TransactionType.EXPENSE && tx.getBudget() != null) {
-            Budget budget = tx.getBudget();
-            budget.setSpent(Math.max(0, budget.getSpent() - tx.getAmount()));
-            budgetRepository.save(budget);
+            // Atomic, zero-floored decrement — safe against concurrent writers.
+            budgetRepository.decrementSpentClamped(tx.getBudget().getId(), tx.getAmount());
         }
         tx.setBudget(null);
         tx.setTransfer(true);
@@ -303,8 +302,8 @@ public class PlaidTransactionIngestService {
         if (tx.getType() == TransactionType.EXPENSE) {
             Budget budget = resolveOrCreateBudget(tx.getUser(), tx.getCategory(), tx.getDate());
             tx.setBudget(budget);
-            budget.setSpent(budget.getSpent() + tx.getAmount());
-            budgetRepository.save(budget);
+            // Atomic database-side increment — safe against concurrent writers.
+            budgetRepository.incrementSpent(budget.getId(), tx.getAmount());
         }
         tx.setTransfer(false);
         transactionRepository.save(tx);
@@ -363,10 +362,9 @@ public class PlaidTransactionIngestService {
         if (incomingTransfer) {
             // A transfer is movement of existing money — it must not count
             // toward any budget. Restore the contribution if the row previously
-            // was a budgeted expense.
+            // was a budgeted expense. Atomic, zero-floored decrement.
             if (!wasTransfer && oldBudget != null && oldType == TransactionType.EXPENSE) {
-                oldBudget.setSpent(Math.max(0, oldBudget.getSpent() - oldAmount));
-                budgetRepository.save(oldBudget);
+                budgetRepository.decrementSpentClamped(oldBudget.getId(), oldAmount);
             }
             tx.setBudget(null);
             transactionRepository.save(tx);
@@ -379,10 +377,9 @@ public class PlaidTransactionIngestService {
 
         if (wasTransfer) {
             // Previously a transfer with no budget contribution; the full
-            // amount is now real activity.
+            // amount is now real activity. Atomic database-side increment.
             if (type == TransactionType.EXPENSE) {
-                budget.setSpent(budget.getSpent() + absoluteAmount);
-                budgetRepository.save(budget);
+                budgetRepository.incrementSpent(budget.getId(), absoluteAmount);
             }
             return;
         }
@@ -445,8 +442,10 @@ public class PlaidTransactionIngestService {
         }
 
         if (!transfer && type == TransactionType.EXPENSE) {
-            budget.setSpent(budget.getSpent() + absoluteAmount);
-            budgetRepository.save(budget);
+            // Atomic database-side increment — safe against concurrent writers
+            // (manual transaction creation or another sync page may touch the
+            // same budget at the same time).
+            budgetRepository.incrementSpent(budget.getId(), absoluteAmount);
         }
     }
 
@@ -457,9 +456,8 @@ public class PlaidTransactionIngestService {
     /** Deletes one transaction and restores its budget spent contribution. */
     private void removeTransaction(Transaction tx) {
         if (tx.getType() == TransactionType.EXPENSE && tx.getBudget() != null) {
-            Budget budget = tx.getBudget();
-            budget.setSpent(Math.max(0, budget.getSpent() - tx.getAmount()));
-            budgetRepository.save(budget);
+            // Atomic, zero-floored decrement — safe against concurrent writers.
+            budgetRepository.decrementSpentClamped(tx.getBudget().getId(), tx.getAmount());
         }
         transactionRepository.delete(tx);
     }
@@ -503,22 +501,26 @@ public class PlaidTransactionIngestService {
 
         if (newType == TransactionType.EXPENSE) {
             if (oldType == TransactionType.EXPENSE && !sameBudget) {
-                oldBudget.setSpent(Math.max(0, oldBudget.getSpent() - oldAmount));
-                budgetRepository.save(oldBudget);
+                // Atomic, zero-floored decrement.
+                budgetRepository.decrementSpentClamped(oldBudget.getId(), oldAmount);
             }
             if (!sameBudget) {
-                newBudget.setSpent(newBudget.getSpent() + newAmount);
-                budgetRepository.save(newBudget);
+                // Atomic database-side increment.
+                budgetRepository.incrementSpent(newBudget.getId(), newAmount);
             } else {
                 double diff = newAmount - oldAmount;
                 if (diff != 0.0) {
-                    newBudget.setSpent(newBudget.getSpent() + diff);
-                    budgetRepository.save(newBudget);
+                    // Atomic database-side adjustment of the same budget.
+                    if (diff > 0) {
+                        budgetRepository.incrementSpent(newBudget.getId(), diff);
+                    } else {
+                        budgetRepository.decrementSpentClamped(newBudget.getId(), -diff);
+                    }
                 }
             }
         } else if (oldType == TransactionType.EXPENSE) {
-            oldBudget.setSpent(Math.max(0, oldBudget.getSpent() - oldAmount));
-            budgetRepository.save(oldBudget);
+            // Atomic, zero-floored decrement.
+            budgetRepository.decrementSpentClamped(oldBudget.getId(), oldAmount);
         }
     }
 

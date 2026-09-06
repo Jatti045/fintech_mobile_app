@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -179,10 +180,8 @@ class PlaidTransactionIngestServiceTest {
         assertTrue(created.isAutoCreated());
         assertEquals("Food & Drink", created.getCategory());
 
-        // The created budget's spent is incremented by the expense amount.
-        ArgumentCaptor<Budget> saveCaptor = ArgumentCaptor.forClass(Budget.class);
-        verify(budgetRepository).save(saveCaptor.capture());
-        assertEquals(12.5, saveCaptor.getValue().getSpent());
+        // The created budget's spent is incremented atomically in the database.
+        verify(budgetRepository).incrementSpent(created.getId(), 12.5);
 
         List<Object> args = capturedInsertArgs();
         assertEquals(TransactionType.EXPENSE.name(), args.get(IDX_TYPE));
@@ -351,9 +350,8 @@ class PlaidTransactionIngestServiceTest {
 
         upsert(plaidTx("t6", "Lunch", "FOOD_AND_DRINK", 20.0, Instant.now(), "USD", null));
 
-        // The existing budget is reused — no new budget is created.
-        verify(budgetRepository).save(existing);
-        assertEquals(120.0, existing.getSpent()); // spent incremented on the existing row
+        // The existing budget is reused — spent adjusted atomically in the DB.
+        verify(budgetRepository).incrementSpent("b1", 20.0);
     }
 
     @Test
@@ -366,8 +364,7 @@ class PlaidTransactionIngestServiceTest {
 
         upsert(plaidTx("t7", "Dinner", "dinner", 15.0, Instant.now(), "USD", null));
 
-        verify(budgetRepository).save(existing);
-        assertEquals(25.0, existing.getSpent());
+        verify(budgetRepository).incrementSpent("b2", 15.0);
     }
 
     // ── Upsert conflict (row already exists → reconcile as update) ───────────
@@ -389,8 +386,8 @@ class PlaidTransactionIngestServiceTest {
         ArgumentCaptor<Transaction> txCaptor = ArgumentCaptor.forClass(Transaction.class);
         verify(transactionRepository, times(1)).save(txCaptor.capture());
         assertEquals(35.0, txCaptor.getValue().getAmount());
-        // Spent adjusted by the diff (30 -> 35 = +5).
-        assertEquals(35.0, budget.getSpent());
+        // Spent adjusted by the diff (30 -> 35 = +5) atomically.
+        verify(budgetRepository).incrementSpent("b3", 5.0);
     }
 
     @Test
@@ -406,7 +403,7 @@ class PlaidTransactionIngestServiceTest {
 
         upsert(plaidTx("dup-2", "Lunch", "Food", 25.0, Instant.now(), "USD", null));
 
-        assertEquals(35.0, budget.getSpent()); // 50 - (40 - 25)
+        verify(budgetRepository).decrementSpentClamped("b4", 15.0); // 50 - (40 - 25)
     }
 
     @Test
@@ -423,7 +420,7 @@ class PlaidTransactionIngestServiceTest {
         // Now the same transaction is an income (negative) — spent must be restored.
         upsert(plaidTx("dup-3", "Refund", "Food", -80.0, Instant.now(), "USD", null));
 
-        assertEquals(0.0, budget.getSpent());
+        verify(budgetRepository).decrementSpentClamped("b5", 80.0);
     }
 
 
@@ -445,6 +442,8 @@ class PlaidTransactionIngestServiceTest {
         // No budget was auto-created and nothing incremented spent.
         verify(budgetRepository, never()).saveAndFlush(any(Budget.class));
         verify(budgetRepository, never()).save(any(Budget.class));
+        verify(budgetRepository, never()).incrementSpent(anyString(), anyDouble());
+        verify(budgetRepository, never()).decrementSpentClamped(anyString(), anyDouble());
     }
 
     @Test
@@ -461,6 +460,8 @@ class PlaidTransactionIngestServiceTest {
         assertNull(args.get(IDX_BUDGET_ID));
         verify(budgetRepository, never()).saveAndFlush(any(Budget.class));
         verify(budgetRepository, never()).save(any(Budget.class));
+        verify(budgetRepository, never()).incrementSpent(anyString(), anyDouble());
+        verify(budgetRepository, never()).decrementSpentClamped(anyString(), anyDouble());
     }
 
     @Test
@@ -478,6 +479,8 @@ class PlaidTransactionIngestServiceTest {
         assertTrue(stored.isTransfer());
         assertNull(stored.getBudget());
         verify(budgetRepository, never()).save(any(Budget.class));
+        verify(budgetRepository, never()).incrementSpent(anyString(), anyDouble());
+        verify(budgetRepository, never()).decrementSpentClamped(anyString(), anyDouble());
     }
 
     @Test
@@ -495,8 +498,8 @@ class PlaidTransactionIngestServiceTest {
         verify(transactionRepository).save(stored);
         assertTrue(stored.isTransfer());
         assertNull(stored.getBudget());
-        assertEquals(0.0, budget.getSpent()); // contribution removed
-        verify(budgetRepository).save(budget);
+        // The old budget contribution is restored with an atomic decrement.
+        verify(budgetRepository).decrementSpentClamped("bt2", 2000.0);
     }
 
 
@@ -579,7 +582,9 @@ class PlaidTransactionIngestServiceTest {
         upsert(plaidTx("conf-1", "STARBUCKS", "Food", 5.0, Instant.parse("2026-01-10T00:00:00Z"), "USD", null));
 
         verify(transactionRepository).save(stored); // reconciled as an update instead
-        assertEquals(5.0, budget.getSpent());       // same amount -> no double increment
+        // Same amount -> no budget adjustment at all (no double increment).
+        verify(budgetRepository, never()).incrementSpent(anyString(), anyDouble());
+        verify(budgetRepository, never()).decrementSpentClamped(anyString(), anyDouble());
     }
 
 
@@ -594,8 +599,8 @@ class PlaidTransactionIngestServiceTest {
 
         service.removeByPlaidIds(List.of("rem-1"), "user-1");
 
-        assertEquals(50.0, budget.getSpent());
-        verify(budgetRepository).save(budget);
+        // Atomic, zero-floored decrement restores the contribution.
+        verify(budgetRepository).decrementSpentClamped("b6", 40.0);
         verify(transactionRepository).delete(tx);
     }
 
@@ -608,8 +613,7 @@ class PlaidTransactionIngestServiceTest {
 
         service.removeByPlaidIds(List.of("rem-2"), "user-1");
 
-        assertEquals(30.0, budget.getSpent());
-        verify(budgetRepository, never()).save(any(Budget.class));
+        verifyNoInteractions(budgetRepository);
         verify(transactionRepository).delete(tx);
     }
 
@@ -624,8 +628,9 @@ class PlaidTransactionIngestServiceTest {
 
         service.removeByPlaidIds(List.of("r1", "r2"), "user-1");
 
-        assertEquals(0.0, b1.getSpent());
-        assertEquals(0.0, b2.getSpent());
+        // Both reversals are applied atomically.
+        verify(budgetRepository).decrementSpentClamped("b8", 10.0);
+        verify(budgetRepository).decrementSpentClamped("b9", 20.0);
         verify(transactionRepository).delete(t1);
         verify(transactionRepository).delete(t2);
     }
@@ -639,7 +644,7 @@ class PlaidTransactionIngestServiceTest {
 
         service.removeByPlaidIds(List.of("rem-3"), "user-1");
 
-        assertEquals(0.0, budget.getSpent()); // floored at zero
+        verify(budgetRepository).decrementSpentClamped("b10", 50.0); // floored at zero
         verify(transactionRepository).delete(tx);
     }
 }

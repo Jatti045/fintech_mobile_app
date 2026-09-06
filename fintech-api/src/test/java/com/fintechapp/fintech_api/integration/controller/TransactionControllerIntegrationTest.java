@@ -16,6 +16,7 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import static org.mockito.Mockito.when;
 
@@ -25,7 +26,12 @@ import com.fintechapp.fintech_api.model.Transaction;
 import com.fintechapp.fintech_api.model.TransactionType;
 import com.fintechapp.fintech_api.model.User;
 
+import jakarta.persistence.EntityManager;
+
 class TransactionControllerIntegrationTest extends BaseIntegrationTest {
+
+    @Autowired
+    private EntityManager entityManager;
 
     // Asserts create transaction succeeds and updates linked budget spent for expense transactions.
     @Test
@@ -363,6 +369,12 @@ class TransactionControllerIntegrationTest extends BaseIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.transaction.budget.id").value(diningBudget.getId()));
+
+        // The atomic spent updates bypass the JPA first-level cache; flush and
+        // clear the test-managed persistence context so the reloads below read
+        // true database state instead of stale managed entities.
+        entityManager.flush();
+        entityManager.clear();
 
         Budget reloadedFood = budgetRepository.findById(foodBudget.getId()).orElseThrow();
         Budget reloadedDining = budgetRepository.findById(diningBudget.getId()).orElseThrow();

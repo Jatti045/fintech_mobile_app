@@ -32,6 +32,8 @@ import com.fintechapp.fintech_api.repository.TransactionRepository;
 import com.fintechapp.fintech_api.repository.UserRepository;
 import com.fintechapp.fintech_api.dto.auth.AuthenticatedUser;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.criteria.Predicate;
 
 @Service
@@ -47,6 +49,15 @@ public class TransactionService {
     private final UserRepository userRepository;
     private final FinancialCacheInvalidator cacheInvalidator;
     private final CurrencyConversionService currencyConversionService;
+
+    /**
+     * Used to refresh the in-memory {@link Budget} after an atomic
+     * {@code spent} update so response payloads reflect the value the
+     * database actually persisted (the managed entity is never written back,
+     * which is what makes concurrent updates safe).
+     */
+    @PersistenceContext
+    private EntityManager entityManager;
 
     public TransactionService(
             BudgetRepository budgetRepository,
@@ -225,8 +236,13 @@ public class TransactionService {
         Transaction saved = transactionRepository.save(transaction);
 
         if (saved.getType() == TransactionType.EXPENSE) {
-            budget.setSpent(budget.getSpent() + saved.getAmount());
-            budgetRepository.save(budget);
+            // Atomic database-side increment: concurrent writers to the same
+            // budget can never lose each other's update. The managed entity is
+            // NOT saved back afterwards — that would overwrite the atomic
+            // result with a stale in-memory value — so it is refreshed instead
+            // to give the response the persisted value.
+            budgetRepository.incrementSpent(budget.getId(), saved.getAmount());
+            entityManager.refresh(budget);
         }
 
         // The month aggregate and recurring-payment detection changed —
@@ -263,8 +279,10 @@ public class TransactionService {
         TransactionType type = existing.getType();
 
         if (budget != null && type == TransactionType.EXPENSE) {
-            budget.setSpent(budget.getSpent() - amount);
-            budgetRepository.save(budget);
+            // Atomic database-side decrement: safe against concurrent budget
+            // writers. The entity is never saved back, so no stale value can
+            // overwrite the atomic result.
+            budgetRepository.decrementSpent(budget.getId(), amount);
         }
 
         transactionRepository.delete(existing);
@@ -397,13 +415,14 @@ public class TransactionService {
             if (newType != TransactionType.EXPENSE
                     || newBudget == null
                     || !oldBudget.getId().equals(newBudget.getId())) {
-                oldBudget.setSpent(oldBudget.getSpent() - oldAmount);
-                budgetRepository.save(oldBudget);
+                // Atomic database-side decrement (no stale entity write-back).
+                budgetRepository.decrementSpent(oldBudget.getId(), oldAmount);
             } else {
                 double diff = newAmount - oldAmount;
                 if (diff != 0) {
-                    oldBudget.setSpent(oldBudget.getSpent() + diff);
-                    budgetRepository.save(oldBudget);
+                    // Atomic database-side adjustment of the same budget.
+                    budgetRepository.incrementSpent(oldBudget.getId(), diff);
+                    entityManager.refresh(oldBudget);
                 }
             }
         }
@@ -411,8 +430,9 @@ public class TransactionService {
         if (newType == TransactionType.EXPENSE
                 && newBudget != null
                 && (oldBudget == null || !oldBudget.getId().equals(newBudget.getId()))) {
-            newBudget.setSpent(newBudget.getSpent() + newAmount);
-            budgetRepository.save(newBudget);
+            // Atomic database-side increment (no stale entity write-back).
+            budgetRepository.incrementSpent(newBudget.getId(), newAmount);
+            entityManager.refresh(newBudget);
         }
 
         if (request.name() != null) {

@@ -27,6 +27,16 @@ import jakarta.persistence.Index;
         @Index(name = "idx_budgets_user_date", columnList = "user_id,date"),
         @Index(name = "idx_budgets_user_category", columnList = "user_id,category")
 })
+/*
+ * Dynamic updates are a correctness requirement here, not an optimization:
+ * budget.spent is mutated ONLY through atomic database-side updates
+ * (BudgetRepository.incrementSpent/decrementSpent*), never in memory. When
+ * other code mutates a budget (e.g. BudgetService updating limit/category)
+ * and the entity flushes, @DynamicUpdate ensures the UPDATE statement
+ * contains only the dirty columns — a stale in-memory spent value can never
+ * be written back over a concurrent atomic increment/decrement.
+ */
+@org.hibernate.annotations.DynamicUpdate
 @Getter
 @Setter
 @NoArgsConstructor
