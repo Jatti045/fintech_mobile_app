@@ -71,6 +71,24 @@ class FinancialSummaryServiceTest {
     }
 
     @Test
+    void resolveForMonth_mixedCurrencyMonth_aggregatesNormalizedAmountsOnly() {
+        // Currency-safety contract: the repository sums amounts that were
+        // already normalized into the user's aggregation currency at ingestion
+        // time. For a CAD user with 100 CAD + 100 USD of expenses (rate 1.25),
+        // the sum is 100 + 125 = 225 — never the raw 200 under one currency.
+        stubExpenseTotal(225.0);
+        stubIncome(1000.0, 1000.0);
+
+        FinancialSummaryData summary = service.resolveForMonth(user, 2026, 7);
+
+        assertEquals(225.0, summary.totalAmount());
+        // Net math runs on normalized values: normalized income - normalized
+        // expenses.
+        assertEquals(775.0, summary.netRemaining());
+        assertEquals(22.5, summary.spentPercentageOfIncome());
+    }
+
+    @Test
     void resolveForMonth_usesExpectedIncomeWhenNoActualInflow() {
         stubExpenseTotal(200.0);
         stubIncome(4000.0, 0.0);

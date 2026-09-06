@@ -15,11 +15,6 @@ import {
 import { useRefresh } from "@/hooks/useRefresh";
 import { useTransactionDisplayAmounts } from "@/hooks/transaction/useTransactionDisplayAmounts";
 import { useBudgetDisplayAmounts } from "@/hooks/budget/useBudgetDisplayAmounts";
-import { convertCurrency } from "@/utils/currencyConverter";
-import {
-  inferExpenseSourceCurrency,
-  normalizeCurrency,
-} from "@/utils/currencyInference";
 import { PAGINATION_LIMIT } from "@/constants/appConfig";
 import type { IBudget } from "@/types/budget/types";
 import type { ITransaction } from "@/types/transaction/types";
@@ -50,7 +45,7 @@ const NO_BUDGETS: IBudget[] = [];
  *    Subscribing is the only fetch mechanism — requests are deduped across
  *    all screens viewing the same month, and cache entries are keyed per
  *    month so navigation can never mix months.
- *  - currency conversion of the expense total (with stale-response guard)
+ *  - backend-normalized financial aggregates
  *  - month metadata + calendar navigation handlers
  *  - modal state + the "budget required" transaction guard
  *
@@ -143,51 +138,6 @@ export const useHomeScreen = () => {
     ]),
   );
 
-  // ── Currency conversion of the expense total ─────────────────────────
-  // The financial summary total may be denominated in a legacy source
-  // currency; infer it from the expense transactions and convert for display.
-  // A `cancelled` flag keeps a stale conversion (e.g. after a month change)
-  // from overwriting the latest result. Conversion failures fall back to the
-  // raw total.
-  const [convertedExpenseTotal, setConvertedExpenseTotal] = useState(
-    Number(financialSummary?.totalAmount || 0),
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const run = async () => {
-      const rawTotal = Number(financialSummary?.totalAmount || 0);
-      const toCurrency = normalizeCurrency(activeCurrency) || "USD";
-      const fromCurrency = inferExpenseSourceCurrency(
-        transactions,
-        user?.currency,
-      );
-
-      if (!rawTotal || fromCurrency === toCurrency) {
-        if (!cancelled) setConvertedExpenseTotal(rawTotal);
-        return;
-      }
-
-      try {
-        const converted = await convertCurrency(
-          rawTotal,
-          fromCurrency,
-          toCurrency,
-        );
-        if (!cancelled) setConvertedExpenseTotal(Number(converted || 0));
-      } catch {
-        if (!cancelled) setConvertedExpenseTotal(rawTotal);
-      }
-    };
-
-    run();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [financialSummary?.totalAmount, activeCurrency, transactions, user?.currency]);
-
   // ── Month metadata (trivial — computed directly, no memo) ─────────────
   const now = new Date();
   const isCurrentMonth =
@@ -232,7 +182,9 @@ export const useHomeScreen = () => {
     displayBudgets,
     activeCurrency,
     monthlyIncome: Number(financialSummary?.monthlyIncome || 0),
-    expenseTotal: convertedExpenseTotal,
+    // The API guarantees that all summary fields are already denominated in
+    // the user's selected currency; never convert an aggregate client-side.
+    expenseTotal: Number(financialSummary?.totalAmount || 0),
     monthLabel,
     isCurrentMonth,
     month: calendar.month,

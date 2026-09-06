@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { convertCurrency } from "@/utils/currencyConverter";
 import type { DisplayBudget, IBudget } from "@/types/budget/types";
 import type { ITransaction } from "@/types/transaction/types";
 
@@ -10,37 +9,23 @@ const normalizeCurrency = (value?: string | null) =>
     .trim()
     .toUpperCase();
 
-const pickMostFrequentCurrency = (items: string[]) => {
-  const counts = new Map<string, number>();
-  for (const c of items) {
-    if (!c) continue;
-    counts.set(c, (counts.get(c) || 0) + 1);
-  }
-
-  let best = "";
-  let max = 0;
-  for (const [currency, count] of counts.entries()) {
-    if (count > max) {
-      max = count;
-      best = currency;
-    }
-  }
-
-  return best;
-};
-
 /**
- * Returns budget amounts converted for display in the active/default currency.
+ * Returns budget amounts for display.
  *
- * Important:
- * - `limit` is treated as canonical (already authored in the user's default
- *   currency at create/update time), so it is NOT re-converted here.
- * - `spent` is derived from historical transactions and may need conversion
- *   for display when old records were created under another default currency.
+ * Both `limit` and `spent` are canonical in the user's aggregation currency:
+ * the backend normalizes every transaction into that currency at ingestion
+ * time before `spent` is assembled, so converting an aggregate here would be
+ * incorrect whenever a budget contains transactions from multiple source
+ * currencies. The previous conversion-based implementation was therefore
+ * reduced to a pure passthrough of the persisted values.
+ *
+ * The update cadence (state initialized at mount, refreshed by an effect)
+ * intentionally mirrors the previous implementation — consumers and tests
+ * depend on the display amounts trailing the raw store data by one commit.
  */
 export function useBudgetDisplayAmounts(
   budgets: IBudget[],
-  transactions: ITransaction[],
+  _transactions: ITransaction[],
   activeCurrency: string,
 ) {
   const [displayBudgets, setDisplayBudgets] = useState<DisplayBudget[]>(() =>
@@ -57,91 +42,17 @@ export function useBudgetDisplayAmounts(
     [activeCurrency],
   );
 
-  const globalSourceCurrency = useMemo(() => {
-    const txCurrencies = transactions
-      .filter(
-        (t) =>
-          !t.isTransfer &&
-          String(t.type ?? "EXPENSE").toUpperCase() === "EXPENSE",
-      )
-      .map((t) => normalizeCurrency(t.baseCurrency || t.originalCurrency));
-
-    return pickMostFrequentCurrency(txCurrencies) || normalizedActiveCurrency;
-  }, [transactions, normalizedActiveCurrency]);
-
   useEffect(() => {
     let cancelled = false;
 
     const run = async () => {
-      const byBudgetId = new Map<string, string[]>();
-      const byCategory = new Map<string, string[]>();
-
-      for (const tx of transactions) {
-        if (String(tx.type ?? "EXPENSE").toUpperCase() !== "EXPENSE") continue;
-        // Transfers between the user's own accounts are not spending.
-        if (tx.isTransfer) continue;
-        const txCurrency = normalizeCurrency(
-          tx.baseCurrency || tx.originalCurrency,
-        );
-        if (!txCurrency) continue;
-
-        if (tx.budgetId) {
-          const arr = byBudgetId.get(tx.budgetId) || [];
-          arr.push(txCurrency);
-          byBudgetId.set(tx.budgetId, arr);
-        }
-
-        const cat = String(tx.category || "")
-          .trim()
-          .toLowerCase();
-        if (cat) {
-          const arr = byCategory.get(cat) || [];
-          arr.push(txCurrency);
-          byCategory.set(cat, arr);
-        }
-      }
-
       const mapped = await Promise.all(
-        budgets.map(async (budget) => {
-          const budgetCurrencies =
-            byBudgetId.get(budget.id) ||
-            byCategory.get(
-              String(budget.category || "")
-                .trim()
-                .toLowerCase(),
-            ) ||
-            [];
-
-          const sourceCurrency =
-            pickMostFrequentCurrency(budgetCurrencies) || globalSourceCurrency;
-
-          const rawLimit = Number(budget.limit || 0);
-          const rawSpent = Number(budget.spent || 0);
-
-          // Limit is canonical in active/default currency; do not convert.
-          const displayLimit = rawLimit;
-          let displaySpent = rawSpent;
-
-          if (sourceCurrency && sourceCurrency !== normalizedActiveCurrency) {
-            try {
-              const convertedSpent = await convertCurrency(
-                rawSpent,
-                sourceCurrency,
-                normalizedActiveCurrency,
-              );
-              displaySpent = Number(convertedSpent || 0);
-            } catch {
-              // Keep persisted values as a fallback.
-            }
-          }
-
-          return {
-            ...budget,
-            displayLimit,
-            displaySpent,
-            displayCurrency: normalizedActiveCurrency,
-          };
-        }),
+        budgets.map(async (budget) => ({
+          ...budget,
+          displayLimit: Number(budget.limit || 0),
+          displaySpent: Number(budget.spent || 0),
+          displayCurrency: normalizedActiveCurrency,
+        })),
       );
 
       if (!cancelled) {
@@ -154,7 +65,7 @@ export function useBudgetDisplayAmounts(
     return () => {
       cancelled = true;
     };
-  }, [budgets, transactions, normalizedActiveCurrency, globalSourceCurrency]);
+  }, [budgets, normalizedActiveCurrency]);
 
   return { displayBudgets };
 }

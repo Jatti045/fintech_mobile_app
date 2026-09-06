@@ -16,6 +16,7 @@ import static org.mockito.Mockito.when;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -44,6 +45,8 @@ class PlaidTransactionIngestServiceTest {
     private static final int IDX_TYPE = 4;
     private static final int IDX_AMOUNT = 5;
     private static final int IDX_BASE_CURRENCY = 6;
+    private static final int IDX_ORIGINAL_AMOUNT = 7;
+    private static final int IDX_ORIGINAL_CURRENCY = 8;
     private static final int IDX_PLAID_TX_ID = 9;
     private static final int IDX_PLAID_ACCOUNT_ID = 10;
     private static final int IDX_PLAID_ITEM_ID = 11;
@@ -64,12 +67,17 @@ class PlaidTransactionIngestServiceTest {
     @Mock
     private JdbcTemplate jdbcTemplate;
 
+    @Mock
+    private CurrencyConversionService currencyConversionService;
+
     private PlaidTransactionIngestService service;
 
     @BeforeEach
     void setUp() {
         service = new PlaidTransactionIngestService(
-                transactionRepository, budgetRepository, categoryFormatter, jdbcTemplate);
+                transactionRepository, budgetRepository, categoryFormatter, jdbcTemplate, currencyConversionService);
+        lenient().when(currencyConversionService.convert(any(Double.class), any(String.class), any(String.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
         lenient().when(categoryFormatter.toReadableCategory(any())).thenReturn("Food & Drink");
     }
 
@@ -248,7 +256,7 @@ class PlaidTransactionIngestServiceTest {
 
     // ── Currency resolution ──────────────────────────────────────────────────
 
-    private void assertCurrency(String iso, String unofficial, String userCurrency, String expected) {
+    private void assertCurrency(String iso, String unofficial, String userCurrency, String expectedOriginal) {
         stubNewTransactionInsert();
 
         User u = user();
@@ -257,7 +265,13 @@ class PlaidTransactionIngestServiceTest {
                 u, plaidTx("c-" + iso + unofficial, "X", "X", 1.0, Instant.now(), iso, unofficial));
 
         List<Object> args = capturedInsertArgs();
-        assertEquals(expected, args.get(IDX_BASE_CURRENCY));
+        // resolveCurrency resolves the RAW Plaid source currency, persisted as
+        // original_currency; the stored base_currency is the user's
+        // aggregation currency, not the Plaid account currency.
+        assertEquals(expectedOriginal, args.get(IDX_ORIGINAL_CURRENCY));
+        assertEquals(
+                userCurrency == null ? "USD" : userCurrency.toUpperCase(Locale.ROOT),
+                args.get(IDX_BASE_CURRENCY));
     }
 
     @Test
@@ -278,6 +292,51 @@ class PlaidTransactionIngestServiceTest {
     @Test
     void resolveCurrency_defaultsToUsdWhenEverythingBlank() {
         assertCurrency(null, null, null, "USD");
+    }
+
+    // ── Mixed-currency normalization (aggregation-currency invariant) ────────
+
+    @Test
+    void insert_foreignCurrencyTransaction_convertsAmountIntoUserAggregationCurrency() {
+        stubNewTransactionInsert();
+        // User aggregates in CAD; the Plaid account is USD. Deterministic
+        // rate: 1 USD = 1.25 CAD.
+        when(currencyConversionService.convert(100.0, "USD", "CAD")).thenReturn(125.0);
+
+        upsert(plaidTx("t-mixed", "US Purchase", "FOOD_AND_DRINK", 100.0,
+                Instant.parse("2026-08-05T10:00:00Z"), "USD", null));
+
+        List<Object> args = capturedInsertArgs();
+        // The stored aggregate amount is the CONVERTED value, never the raw one.
+        assertEquals(125.0, (Double) args.get(IDX_AMOUNT));
+        assertEquals("CAD", args.get(IDX_BASE_CURRENCY));
+        // The raw Plaid values are preserved for display/audit.
+        assertEquals(100.0, (Double) args.get(IDX_ORIGINAL_AMOUNT));
+        assertEquals("USD", args.get(IDX_ORIGINAL_CURRENCY));
+    }
+
+    @Test
+    void upsertTransaction_existingTransactionForeignCurrency_reconvertsIntoAggregationCurrency() {
+        Budget existingBudget = budget("b1", 500.0, 50.0);
+        Transaction existing = transaction("t-mixed", 50.0, TransactionType.EXPENSE, existingBudget);
+        when(transactionRepository.findByPlaidTransactionIdAndUser_Id("t-mixed", "user-1"))
+                .thenReturn(Optional.of(existing));
+        when(budgetRepository.findByUser_IdAndCategoryIgnoreCaseAndDateGreaterThanEqualAndDateLessThan(
+                        eq("user-1"), anyString(), any(Instant.class), any(Instant.class)))
+                .thenReturn(Optional.empty());
+        lenient().when(budgetRepository.save(any(Budget.class))).thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(budgetRepository.saveAndFlush(any(Budget.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(currencyConversionService.convert(100.0, "USD", "CAD")).thenReturn(125.0);
+
+        upsert(plaidTx("t-mixed", "US Purchase", "FOOD_AND_DRINK", 100.0,
+                Instant.parse("2026-08-05T10:00:00Z"), "USD", null));
+
+        // The update path normalizes exactly like the insert path: the stored
+        // amount is the converted value in the user's aggregation currency.
+        assertEquals(125.0, existing.getAmount(), 0.0001);
+        assertEquals("CAD", existing.getBaseCurrency());
+        assertEquals(100.0, existing.getOriginalAmount(), 0.0001);
+        assertEquals("USD", existing.getOriginalCurrency());
     }
 
     // ── Existing budget matching ─────────────────────────────────────────────
@@ -584,4 +643,3 @@ class PlaidTransactionIngestServiceTest {
         verify(transactionRepository).delete(tx);
     }
 }
-

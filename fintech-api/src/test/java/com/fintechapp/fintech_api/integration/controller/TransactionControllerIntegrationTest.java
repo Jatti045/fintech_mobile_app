@@ -17,6 +17,8 @@ import java.util.Map;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
+import static org.mockito.Mockito.when;
+
 import com.fintechapp.fintech_api.integration.support.BaseIntegrationTest;
 import com.fintechapp.fintech_api.model.Budget;
 import com.fintechapp.fintech_api.model.Transaction;
@@ -30,6 +32,11 @@ class TransactionControllerIntegrationTest extends BaseIntegrationTest {
     void createTransaction_validExpenseRequest_createsTransactionAndUpdatesBudget() throws Exception {
         User user = createUser("tx-create@example.com", "Password123!", "tx-create");
         Budget budget = createBudget(user, "Food", 500, Instant.parse("2026-03-01T00:00:00Z"));
+
+        // The user's aggregation currency is USD (default); the transaction is
+        // authored in SGD. The API normalizes 25.5 SGD into 18.73 USD at
+        // ingestion time; the raw values are preserved alongside.
+        when(currencyConversionService.convert(25.5, "SGD", "USD")).thenReturn(18.73);
 
         mockMvc.perform(post("/api/transactions")
                         .header(authHeaderName(), authHeader(user))
@@ -64,6 +71,80 @@ class TransactionControllerIntegrationTest extends BaseIntegrationTest {
         org.junit.jupiter.api.Assertions.assertEquals("USD", savedTx.getBaseCurrency());
         org.junit.jupiter.api.Assertions.assertEquals(25.5, savedTx.getOriginalAmount());
         org.junit.jupiter.api.Assertions.assertEquals("SGD", savedTx.getOriginalCurrency());
+    }
+
+    // End-to-end proof of the mixed-currency invariant: a CAD user with a
+    // 100 CAD expense and a 100 USD expense must aggregate to 100 + 125 = 225
+    // CAD (each transaction normalized at ingestion), never the raw 200.
+    @Test
+    void createTransaction_mixedCurrencies_summaryAggregatesNormalizedAmounts() throws Exception {
+        User user = createUser("tx-mixed@example.com", "Password123!", "tx-mixed");
+        user.setCurrency("CAD");
+        userRepository.save(user);
+
+        LocalDate utc = LocalDate.now(ZoneOffset.UTC);
+        int month = utc.getMonthValue() - 1;
+        int year = utc.getYear();
+        Instant monthStart = LocalDate.of(year, month + 1, 1).atStartOfDay().toInstant(ZoneOffset.UTC);
+        Instant txDate = monthStart.plusSeconds(86_400);
+        Budget food = createBudget(user, "Food", 5000, monthStart);
+
+        // 100 CAD expense — the user's aggregation currency; value unchanged.
+        mockMvc.perform(post("/api/transactions")
+                        .header(authHeaderName(), authHeader(user))
+                        .contentType(json())
+                        .content(asJson(Map.ofEntries(
+                                new AbstractMap.SimpleEntry<>("name", "Groceries"),
+                                new AbstractMap.SimpleEntry<>("month", month),
+                                new AbstractMap.SimpleEntry<>("year", year),
+                                new AbstractMap.SimpleEntry<>("date", txDate.toString()),
+                                new AbstractMap.SimpleEntry<>("category", "Food"),
+                                new AbstractMap.SimpleEntry<>("type", "EXPENSE"),
+                                new AbstractMap.SimpleEntry<>("amount", 100.0),
+                                new AbstractMap.SimpleEntry<>("originalAmount", 100.0),
+                                new AbstractMap.SimpleEntry<>("originalCurrency", "CAD"),
+                                new AbstractMap.SimpleEntry<>("budgetId", food.getId())
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.transaction.amount").value(100.0))
+                .andExpect(jsonPath("$.data.transaction.baseCurrency").value("CAD"))
+                .andExpect(jsonPath("$.data.transaction.originalAmount").value(100.0))
+                .andExpect(jsonPath("$.data.transaction.originalCurrency").value("CAD"));
+
+        // 100 USD expense — normalized to 125 CAD at ingestion time.
+        when(currencyConversionService.convert(100.0, "USD", "CAD")).thenReturn(125.0);
+        mockMvc.perform(post("/api/transactions")
+                        .header(authHeaderName(), authHeader(user))
+                        .contentType(json())
+                        .content(asJson(Map.ofEntries(
+                                new AbstractMap.SimpleEntry<>("name", "US Purchase"),
+                                new AbstractMap.SimpleEntry<>("month", month),
+                                new AbstractMap.SimpleEntry<>("year", year),
+                                new AbstractMap.SimpleEntry<>("date", txDate.toString()),
+                                new AbstractMap.SimpleEntry<>("category", "Food"),
+                                new AbstractMap.SimpleEntry<>("type", "EXPENSE"),
+                                new AbstractMap.SimpleEntry<>("amount", 125.0),
+                                new AbstractMap.SimpleEntry<>("originalAmount", 100.0),
+                                new AbstractMap.SimpleEntry<>("originalCurrency", "USD"),
+                                new AbstractMap.SimpleEntry<>("budgetId", food.getId())
+                        ))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.transaction.amount").value(125.0))
+                .andExpect(jsonPath("$.data.transaction.baseCurrency").value("CAD"))
+                .andExpect(jsonPath("$.data.transaction.originalAmount").value(100.0))
+                .andExpect(jsonPath("$.data.transaction.originalCurrency").value("USD"));
+
+        // The month summary is already denominated in CAD: 100 + 125 = 225 —
+        // not convert(200) under one guessed currency.
+        mockMvc.perform(get("/api/financial-summary")
+                        .header(authHeaderName(), authHeader(user))
+                        .param("month", String.valueOf(month))
+                        .param("year", String.valueOf(year)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalAmount").value(225.0));
+
+        Budget updatedBudget = budgetRepository.findById(food.getId()).orElseThrow();
+        org.junit.jupiter.api.Assertions.assertEquals(225.0, updatedBudget.getSpent());
     }
 
     // Asserts an income transaction can be created without a linked budget.

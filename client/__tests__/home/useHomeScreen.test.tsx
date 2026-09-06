@@ -3,9 +3,10 @@
  *
  * Covers homepage orchestration: initial + month-change fetching (with the
  * correct thunk parameters), refresh (cache bypass), month metadata, calendar
- * navigation, modal state, quick-action guards, display data, and currency
- * conversion (same-currency, converted, failure fallback, stale-response
- * protection).
+ * navigation, modal state, quick-action guards, display data, and the
+ * currency contract: the backend summary is already denominated in the user's
+ * aggregation currency, so the hook must consume it verbatim and never
+ * convert an aggregate client-side (mixed-currency safe by construction).
  */
 
 /// <reference types="jest" />
@@ -52,6 +53,11 @@ jest.mock("@/api/budget", () => ({
   },
 }));
 
+/**
+ * The hook chain must never import the client-side converter for aggregates.
+ * The mock stays in place so that IF a conversion path is ever reintroduced,
+ * the "never converts client-side" assertions below fail loudly.
+ */
 jest.mock("@/utils/currencyConverter", () => ({
   convertCurrency: jest.fn(async (amount: number) => amount),
   getExchangeRate: jest.fn(),
@@ -136,7 +142,7 @@ async function setup(seed?: (store: ReturnType<typeof makeStore>) => void) {
     );
   });
 
-  // Let the fetch + display-amount + conversion effects settle.
+  // Let the fetch + display-amount effects settle.
   await renderer.act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
@@ -366,89 +372,72 @@ describe("useHomeScreen", () => {
     expect(captured.current!.openSetup).toBe(true);
   });
 
-  it("keeps the raw expense total when transactions share the active currency", async () => {
-    mockedTxFetch.mockResolvedValue({
-      data: { transaction: [makeTx({ baseCurrency: "USD" })] },
-    });
+  it("surfaces the backend aggregate verbatim for same-currency users", async () => {
     mockedSummaryFetch.mockResolvedValue({
-      data: makeSummary({ totalAmount: 100 }),
+      data: makeSummary({ totalAmount: 100, monthlyIncome: 4000 }),
     });
     const { captured } = await setup();
 
     expect(captured.current!.expenseTotal).toBe(100);
+    expect(captured.current!.monthlyIncome).toBe(4000);
     expect(mockedConvert).not.toHaveBeenCalled();
   });
 
-  it("converts the expense total from the inferred source currency", async () => {
+  it("never re-converts a mixed-currency aggregate client-side", async () => {
+    // Mixed-currency month (CAD + USD). The backend already normalized every
+    // transaction into the user's aggregation currency before summing, so the
+    // summary total is final: converting it again (or inferring a source
+    // currency) would corrupt the value.
+    mockedTxFetch.mockResolvedValue({
+      data: {
+        transaction: [
+          makeTx({ id: "t-cad", baseCurrency: "CAD", originalCurrency: "CAD" }),
+          makeTx({ id: "t-usd", baseCurrency: "CAD", originalCurrency: "USD" }),
+        ],
+      },
+    });
+    // 100 CAD + (100 USD → 125 CAD) — computed server-side.
+    mockedSummaryFetch.mockResolvedValue({
+      data: makeSummary({ totalAmount: 225, monthlyIncome: 1000, netRemaining: 775 }),
+    });
+    const { captured } = await setup();
+
+    // Exactly the backend number — not convert(200) under one guessed currency.
+    expect(captured.current!.expenseTotal).toBe(225);
+    expect(captured.current!.monthlyIncome).toBe(1000);
+    expect(mockedConvert).not.toHaveBeenCalled();
+  });
+
+  it("passes through net remaining and percentages without conversion", async () => {
+    mockedSummaryFetch.mockResolvedValue({
+      data: makeSummary({
+        totalAmount: 150,
+        monthlyIncome: 2000,
+        netRemaining: 1850,
+        spentPercentageOfIncome: 7.5,
+      }),
+    });
+    const { captured } = await setup();
+
+    expect(captured.current!.expenseTotal).toBe(150);
+    expect(captured.current!.monthlyIncome).toBe(2000);
+    expect(mockedConvert).not.toHaveBeenCalled();
+  });
+
+  it("keeps the backend total when a conversion utility would be available", async () => {
+    // Even with a working converter and foreign-currency transactions on the
+    // month, the hook must not touch them: aggregates are pre-converted.
+    mockedConvert.mockResolvedValue(999);
     mockedTxFetch.mockResolvedValue({
       data: { transaction: [makeTx({ baseCurrency: "EUR" })] },
     });
     mockedSummaryFetch.mockResolvedValue({
-      data: makeSummary({ totalAmount: 100 }),
+      data: makeSummary({ totalAmount: 130 }),
     });
-    mockedConvert.mockResolvedValue(130);
     const { captured } = await setup();
 
     expect(captured.current!.expenseTotal).toBe(130);
-    expect(mockedConvert).toHaveBeenCalledWith(100, "EUR", "USD");
-  });
-
-  it("falls back to the raw total when conversion fails", async () => {
-    mockedTxFetch.mockResolvedValue({
-      data: { transaction: [makeTx({ baseCurrency: "EUR" })] },
-    });
-    mockedSummaryFetch.mockResolvedValue({
-      data: makeSummary({ totalAmount: 100 }),
-    });
-    mockedConvert.mockRejectedValue(new Error("no rate"));
-    const { captured } = await setup();
-
-    expect(captured.current!.expenseTotal).toBe(100);
-  });
-
-  it("ignores a stale conversion result after the data changes", async () => {
-    const deferreds: ((value: number) => void)[] = [];
-    mockedConvert.mockImplementation(
-      () =>
-        new Promise<number>((resolve) => {
-          deferreds.push(resolve);
-        }),
-    );
-    mockedTxFetch.mockResolvedValue({
-      data: { transaction: [makeTx({ baseCurrency: "EUR" })] },
-    });
-    mockedSummaryFetch.mockResolvedValue({
-      data: makeSummary({ totalAmount: 100 }),
-    });
-    const { captured } = await setup();
-
-    // The first conversion is in flight.
-    expect(deferreds).toHaveLength(1);
-
-    // New summary total arrives via background revalidation (pull-to-refresh);
-    // the first (stale) conversion must be cancelled, not allowed to win.
-    mockedSummaryFetch.mockResolvedValue({
-      data: makeSummary({ totalAmount: 200 }),
-    });
-    await renderer.act(async () => {
-      await captured.current!.onRefresh();
-      await flush();
-    });
-    expect(deferreds).toHaveLength(2);
-
-    // The fresh conversion wins…
-    await renderer.act(async () => {
-      deferreds[1](555);
-      await flush();
-    });
-    expect(captured.current!.expenseTotal).toBe(555);
-
-    // …and the stale one cannot overwrite it.
-    await renderer.act(async () => {
-      deferreds[0](999);
-      await flush();
-    });
-    expect(captured.current!.expenseTotal).toBe(555);
+    expect(mockedConvert).not.toHaveBeenCalled();
   });
 });
 

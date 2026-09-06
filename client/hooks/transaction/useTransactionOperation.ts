@@ -12,7 +12,6 @@ import { validateTransactionAmount } from "@/utils/validation";
 import { MAX_TRANSACTION_AMOUNT } from "@/constants/appConfig";
 import { useCalendar, useTransactions } from "../useRedux";
 import { useTransactionForm } from "./useTransactionForm";
-import { convertCurrency } from "@/utils/currencyConverter";
 import { getCurrencySymbol } from "@/constants/Currencies";
 import { hapticSuccess, hapticHeavy } from "@/utils/haptics";
 
@@ -96,25 +95,12 @@ export const useTransactionOperations = () => {
 
       const amt = Number(txAmount);
 
-      // Convert amount if the transaction currency differs from the user's default
-      let finalAmount = amt;
+      // The API owns conversion so Plaid and manual transactions share one
+      // normalization path. `amount` is the original entered value.
+      const finalAmount = amt;
       const originalCurrency = txCurrency;
       const originalAmount = amt;
       const baseCurrency = userCurrency;
-
-      if (txCurrency !== userCurrency) {
-        try {
-          finalAmount = await convertCurrency(amt, txCurrency, userCurrency);
-        } catch (err: any) {
-          showAlert({
-            title: "Conversion Error",
-            message:
-              err.message ||
-              `Failed to convert from ${txCurrency} to ${userCurrency}. Please try again.`,
-          });
-          return;
-        }
-      }
 
       const payload: any = {
         name: txName.trim(),
@@ -224,29 +210,11 @@ export const useTransactionOperations = () => {
         return;
       }
 
-      // Handle currency conversion if the transaction currency differs from user default
-      let finalAmount = Number(txAmount);
+      // The API owns conversion; send the original user-entered amount.
+      const finalAmount = Number(txAmount);
       const originalCurrency = txCurrency;
       const originalAmount = Number(txAmount);
       const baseCurrency = userCurrency;
-
-      if (txCurrency !== userCurrency) {
-        try {
-          finalAmount = await convertCurrency(
-            Number(txAmount),
-            txCurrency,
-            userCurrency,
-          );
-        } catch (err: any) {
-          showAlert({
-            title: "Conversion Error",
-            message:
-              err.message ||
-              `Failed to convert from ${txCurrency} to ${userCurrency}. Please try again.`,
-          });
-          return;
-        }
-      }
 
       // Build a partial update with only changed fields to minimise payload size
       const updates: any = {};

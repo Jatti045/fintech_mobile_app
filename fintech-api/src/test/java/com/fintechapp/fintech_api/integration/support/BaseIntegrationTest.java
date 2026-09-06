@@ -2,6 +2,7 @@ package com.fintechapp.fintech_api.integration.support;
 
 import java.time.Instant;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -9,8 +10,13 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 
 import tools.jackson.databind.ObjectMapper;
 import com.fintechapp.fintech_api.model.Budget;
@@ -24,12 +30,21 @@ import com.fintechapp.fintech_api.repository.PasswordResetTokenRepository;
 import com.fintechapp.fintech_api.repository.TransactionRepository;
 import com.fintechapp.fintech_api.repository.UserMonthlyIncomeRepository;
 import com.fintechapp.fintech_api.repository.UserRepository;
+import com.fintechapp.fintech_api.service.CurrencyConversionService;
 
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Transactional
 public abstract class BaseIntegrationTest {
+
+    /**
+     * Deterministic currency conversion for integration tests: same-currency
+     * pass-through by default, no calls to the live exchange-rate API. Tests
+     * that exercise cross-currency normalization stub explicit rates.
+     */
+    @MockitoBean
+    protected CurrencyConversionService currencyConversionService;
 
     @Autowired
     protected MockMvc mockMvc;
@@ -111,6 +126,12 @@ public abstract class BaseIntegrationTest {
 
     protected String authHeader(User user) {
         return testJwtUtil.bearerHeaderValue(user);
+    }
+
+    @BeforeEach
+    void stubCurrencyConversionPassThrough() {
+        lenient().when(currencyConversionService.convert(any(Double.class), anyString(), anyString()))
+                .thenAnswer(inv -> inv.getArgument(0));
     }
 
     protected String authHeaderName() {

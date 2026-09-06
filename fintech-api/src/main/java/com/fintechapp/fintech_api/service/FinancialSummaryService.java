@@ -83,10 +83,14 @@ public class FinancialSummaryService {
         Instant from = monthStart(year, month);
         Instant to = nextMonthStart(year, month);
 
+        // Currency-safety invariant: SUM here is only correct because every
+        // stored `amount` has already been normalized into the user's
+        // aggregation currency at ingestion time (Plaid sync, manual
+        // create/update — see CurrencyConversionService). Never sum raw
+        // original amounts across currencies.
         double expenseTotal = transactionRepository.sumAmountByUserAndTypeAndDateBetween(
                 user.getId(), TransactionType.EXPENSE, from, to);
         double totalAmount = round2(expenseTotal);
-
         double expectedIncome = incomeCalculationService.resolveExpectedForMonth(user, year, month);
         double actualIncome = incomeCalculationService.resolveActualForMonth(user, year, month);
         // Net calculations use effective income: actual inflow when present,

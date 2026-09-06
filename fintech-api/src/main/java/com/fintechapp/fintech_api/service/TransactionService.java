@@ -46,16 +46,19 @@ public class TransactionService {
     private final TransactionRepository transactionRepository;
     private final UserRepository userRepository;
     private final FinancialCacheInvalidator cacheInvalidator;
+    private final CurrencyConversionService currencyConversionService;
 
     public TransactionService(
             BudgetRepository budgetRepository,
             TransactionRepository transactionRepository,
             UserRepository userRepository,
-            FinancialCacheInvalidator cacheInvalidator) {
+            FinancialCacheInvalidator cacheInvalidator,
+            CurrencyConversionService currencyConversionService) {
         this.budgetRepository = budgetRepository;
         this.transactionRepository = transactionRepository;
         this.userRepository = userRepository;
         this.cacheInvalidator = cacheInvalidator;
+        this.currencyConversionService = currencyConversionService;
     }
 
     /**
@@ -184,17 +187,15 @@ public class TransactionService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not authenticated"));
 
-        String baseCurrency = normalizeCurrency(request.baseCurrency());
-        if (!StringUtils.hasText(baseCurrency)) {
-            baseCurrency = normalizeCurrency(user.getCurrency());
-        }
-        if (!StringUtils.hasText(baseCurrency)) {
-            baseCurrency = DEFAULT_BASE_CURRENCY;
-        }
-
         String originalCurrency = normalizeCurrency(request.originalCurrency());
         if (!StringUtils.hasText(originalCurrency)) {
-            originalCurrency = baseCurrency;
+            originalCurrency = normalizeCurrency(request.baseCurrency());
+        }
+        if (!StringUtils.hasText(originalCurrency)) {
+            originalCurrency = normalizeCurrency(user.getCurrency());
+        }
+        if (!StringUtils.hasText(originalCurrency)) {
+            originalCurrency = DEFAULT_BASE_CURRENCY;
         }
 
         Double originalAmount = request.originalAmount();
@@ -205,13 +206,16 @@ public class TransactionService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "originalAmount must be a positive number");
         }
 
+        String baseCurrency = aggregationCurrency(user);
+        double normalizedAmount = currencyConversionService.convert(originalAmount, originalCurrency, baseCurrency);
+
         Transaction transaction = new Transaction();
         transaction.setUser(user);
         transaction.setName(request.name().trim());
         transaction.setDate(transactionDate);
         transaction.setCategory(request.category().trim());
         transaction.setType(type);
-        transaction.setAmount(request.amount());
+        transaction.setAmount(normalizedAmount);
         transaction.setBaseCurrency(baseCurrency);
         transaction.setOriginalCurrency(originalCurrency);
         transaction.setOriginalAmount(originalAmount);
@@ -357,6 +361,34 @@ public class TransactionService {
             }
         }
 
+        String resolvedBaseCurrency = aggregationCurrency(user);
+        String resolvedOriginalCurrency = request.originalCurrency() != null
+                ? normalizeCurrency(request.originalCurrency())
+                : normalizeCurrency(existing.getOriginalCurrency());
+        Double resolvedOriginalAmount = request.originalAmount() != null
+                ? request.originalAmount()
+                : existing.getOriginalAmount();
+        if (request.amount() != null && request.originalAmount() == null) {
+            resolvedOriginalAmount = request.amount();
+            resolvedOriginalCurrency = normalizeCurrency(request.baseCurrency());
+            if (!StringUtils.hasText(resolvedOriginalCurrency)) {
+                resolvedOriginalCurrency = normalizeCurrency(existing.getBaseCurrency());
+            }
+        }
+        if (resolvedOriginalAmount == null) {
+            resolvedOriginalAmount = newAmount;
+        }
+        if (!StringUtils.hasText(resolvedOriginalCurrency)) {
+            resolvedOriginalCurrency = resolvedBaseCurrency;
+        }
+        if (resolvedOriginalAmount <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "originalAmount must be a positive number");
+        }
+        if (request.amount() != null || request.originalAmount() != null || request.originalCurrency() != null) {
+            newAmount = currencyConversionService.convert(
+                    resolvedOriginalAmount, resolvedOriginalCurrency, resolvedBaseCurrency);
+        }
+
         Budget oldBudget = existing.getBudget();
         double oldAmount = existing.getAmount();
         TransactionType oldType = existing.getType();
@@ -397,45 +429,9 @@ public class TransactionService {
         if (request.type() != null) {
             existing.setType(newType);
         }
-        if (request.amount() != null) {
-            existing.setAmount(newAmount);
-        }
+        existing.setAmount(newAmount);
         if (request.description() != null) {
             existing.setDescription(normalizeOptional(request.description()));
-        }
-
-        String resolvedBaseCurrency = request.baseCurrency() != null
-                ? normalizeCurrency(request.baseCurrency())
-                : normalizeCurrency(existing.getBaseCurrency());
-        if (!StringUtils.hasText(resolvedBaseCurrency)) {
-            resolvedBaseCurrency = normalizeCurrency(user.getCurrency());
-        }
-        if (!StringUtils.hasText(resolvedBaseCurrency)) {
-            resolvedBaseCurrency = DEFAULT_BASE_CURRENCY;
-        }
-
-        String resolvedOriginalCurrency = request.originalCurrency() != null
-                ? normalizeCurrency(request.originalCurrency())
-                : normalizeCurrency(existing.getOriginalCurrency());
-        Double resolvedOriginalAmount = request.originalAmount() != null
-                ? request.originalAmount()
-                : existing.getOriginalAmount();
-
-        // If amount changed but no original snapshot provided, treat current amount
-        // as the original amount in base currency.
-        if (request.amount() != null && request.originalAmount() == null && request.originalCurrency() == null) {
-            resolvedOriginalAmount = newAmount;
-            resolvedOriginalCurrency = resolvedBaseCurrency;
-        }
-
-        if (resolvedOriginalAmount == null) {
-            resolvedOriginalAmount = newAmount;
-        }
-        if (!StringUtils.hasText(resolvedOriginalCurrency)) {
-            resolvedOriginalCurrency = resolvedBaseCurrency;
-        }
-        if (resolvedOriginalAmount <= 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "originalAmount must be a positive number");
         }
 
         existing.setBaseCurrency(resolvedBaseCurrency);
@@ -608,5 +604,10 @@ public class TransactionService {
             return null;
         }
         return value.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private String aggregationCurrency(User user) {
+        String currency = normalizeCurrency(user.getCurrency());
+        return StringUtils.hasText(currency) ? currency : DEFAULT_BASE_CURRENCY;
     }
 }

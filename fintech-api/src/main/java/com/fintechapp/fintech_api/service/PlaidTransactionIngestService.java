@@ -74,16 +74,19 @@ public class PlaidTransactionIngestService {
     private final BudgetRepository budgetRepository;
     private final PlaidCategoryFormatter categoryFormatter;
     private final JdbcTemplate jdbcTemplate;
+    private final CurrencyConversionService currencyConversionService;
 
     public PlaidTransactionIngestService(
             TransactionRepository transactionRepository,
             BudgetRepository budgetRepository,
             PlaidCategoryFormatter categoryFormatter,
-            JdbcTemplate jdbcTemplate) {
+            JdbcTemplate jdbcTemplate,
+            CurrencyConversionService currencyConversionService) {
         this.transactionRepository = transactionRepository;
         this.budgetRepository = budgetRepository;
         this.categoryFormatter = categoryFormatter;
         this.jdbcTemplate = jdbcTemplate;
+        this.currencyConversionService = currencyConversionService;
     }
 
     /**
@@ -331,9 +334,11 @@ public class PlaidTransactionIngestService {
     private void applyUpdate(Transaction tx, User user, PlaidTransaction plaidTx) {
         String category = categoryFormatter.toReadableCategory(plaidTx.category());
         Instant txDate = plaidTx.date() != null ? plaidTx.date() : Instant.EPOCH;
-        double absoluteAmount = Math.abs(plaidTx.amount());
+        double originalAmount = Math.abs(plaidTx.amount());
         TransactionType type = plaidTx.amount() >= 0 ? TransactionType.EXPENSE : TransactionType.INCOME;
-        String baseCurrency = resolveCurrency(plaidTx.isoCurrencyCode(), plaidTx.unofficialCurrencyCode(), user);
+        String originalCurrency = resolveCurrency(plaidTx.isoCurrencyCode(), plaidTx.unofficialCurrencyCode(), user);
+        String baseCurrency = aggregationCurrency(user);
+        double absoluteAmount = currencyConversionService.convert(originalAmount, originalCurrency, baseCurrency);
 
         boolean incomingTransfer = plaidTx.transfer();
         boolean wasTransfer = tx.isTransfer();
@@ -347,8 +352,8 @@ public class PlaidTransactionIngestService {
         tx.setAmount(absoluteAmount);
         tx.setType(type);
         tx.setBaseCurrency(baseCurrency);
-        tx.setOriginalCurrency(baseCurrency);
-        tx.setOriginalAmount(absoluteAmount);
+        tx.setOriginalCurrency(originalCurrency);
+        tx.setOriginalAmount(originalAmount);
                 tx.setPlaidTransactionId(plaidTx.transactionId());
         tx.setPlaidAccountId(plaidTx.plaidAccountId());
         tx.setPlaidItemId(plaidTx.plaidItemId());
@@ -397,9 +402,11 @@ public class PlaidTransactionIngestService {
     private void insert(User user, PlaidTransaction plaidTx) {
         String category = categoryFormatter.toReadableCategory(plaidTx.category());
         Instant txDate = plaidTx.date() != null ? plaidTx.date() : Instant.EPOCH;
-        double absoluteAmount = Math.abs(plaidTx.amount());
+        double originalAmount = Math.abs(plaidTx.amount());
         TransactionType type = plaidTx.amount() >= 0 ? TransactionType.EXPENSE : TransactionType.INCOME;
-        String baseCurrency = resolveCurrency(plaidTx.isoCurrencyCode(), plaidTx.unofficialCurrencyCode(), user);
+        String originalCurrency = resolveCurrency(plaidTx.isoCurrencyCode(), plaidTx.unofficialCurrencyCode(), user);
+        String baseCurrency = aggregationCurrency(user);
+        double absoluteAmount = currencyConversionService.convert(originalAmount, originalCurrency, baseCurrency);
         boolean transfer = plaidTx.transfer();
         Budget budget = transfer ? null : resolveOrCreateBudget(user, category, txDate);
 
@@ -419,8 +426,8 @@ public class PlaidTransactionIngestService {
                 type.name(),
                 absoluteAmount,
                 baseCurrency,
-                absoluteAmount,
-                baseCurrency,
+                originalAmount,
+                originalCurrency,
                                 plaidTx.transactionId(),
                 plaidTx.plaidAccountId(),
                 plaidTx.plaidItemId(),
@@ -526,6 +533,12 @@ public class PlaidTransactionIngestService {
             return user.getCurrency().trim().toUpperCase(Locale.ROOT);
         }
         return DEFAULT_BASE_CURRENCY;
+    }
+
+    private String aggregationCurrency(User user) {
+        return StringUtils.hasText(user.getCurrency())
+                ? user.getCurrency().trim().toUpperCase(Locale.ROOT)
+                : DEFAULT_BASE_CURRENCY;
     }
 
     private Instant monthStart(int year, int month) {
