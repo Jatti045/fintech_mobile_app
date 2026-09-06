@@ -23,6 +23,7 @@ import themeReducer from "@/store/slices/themeSlice";
 import calendarReducer from "@/store/slices/calendarSlice";
 import notificationReducer from "@/store/slices/notificationSlice";
 import api from "@/store/api/apiSlice";
+import { clearRatesCache } from "@/utils/currencyConverter";
 import type { IUser } from "@/types/user/types";
 
 jest.mock("@/api/user", () => ({
@@ -37,6 +38,7 @@ jest.mock("@/api/user", () => ({
     uploadProfilePictureById: jest.fn(),
     deleteProfilePictureById: jest.fn(),
     changePassword: jest.fn(),
+    hasAnyTransactions: jest.fn(),
     updateCurrency: jest.fn(),
     updateMonthlyIncome: jest.fn(),
     forgotPassword: jest.fn(),
@@ -118,11 +120,10 @@ function setup() {
   // Authenticate the session exactly as a completed login would.
   renderer.act(() => {
     store.dispatch(
-      loginUser.fulfilled(
-        { user, token: "tok" },
-        "req-1",
-        { email: "user@test.com", password: "secret1" },
-      ),
+      loginUser.fulfilled({ user, token: "tok" }, "req-1", {
+        email: "user@test.com",
+        password: "secret1",
+      }),
     );
   });
 
@@ -167,6 +168,9 @@ beforeEach(() => {
   mockedRouterReplace.mockReset();
   (userAPI.getStoredToken as jest.Mock).mockReset();
   (userAPI.getStoredUser as jest.Mock).mockReset();
+  (userAPI.hasAnyTransactions as jest.Mock).mockReset();
+  (userAPI.updateCurrency as jest.Mock).mockReset();
+  (clearRatesCache as jest.Mock).mockReset();
   // Mount effects default: some existing data so refresh deltas are visible.
   mockedGetMonthlyIncome.mockResolvedValue({
     data: { monthlyIncome: 3000, actualMonthlyIncome: 2900 },
@@ -241,5 +245,72 @@ describe("useProfile refresh", () => {
     expect(captured.current!.refreshing).toBe(false);
     expect(captured.current!.monthlyIncomeInput).toBe("6400");
     expect(mockedRouterPush).not.toHaveBeenCalled();
+  });
+});
+
+describe("useProfile currency change", () => {
+  it("locks currency change when user has existing transactions", async () => {
+    const { captured, store } = setup();
+    (userAPI.hasAnyTransactions as jest.Mock).mockResolvedValue(true);
+
+    await renderer.act(async () => {
+      captured.current!.handleCurrencySelect("EUR");
+      await flush();
+    });
+
+    expect(userAPI.hasAnyTransactions).toHaveBeenCalled();
+    expect(userAPI.updateCurrency).not.toHaveBeenCalled();
+    expect(clearRatesCache).not.toHaveBeenCalled();
+    expect(store.getState().user.user?.currency).toBe("USD");
+  });
+
+  it("allows currency change, updates user state, clears rates cache, and resets RTK Query state when user has no transactions", async () => {
+    const { captured, store } = setup();
+    (userAPI.hasAnyTransactions as jest.Mock).mockResolvedValue(false);
+    (userAPI.updateCurrency as jest.Mock).mockResolvedValue({
+      data: { currency: "EUR" },
+    });
+
+    // Seed RTK Query cache with query data
+    renderer.act(() => {
+      store.dispatch(
+        api.util.upsertQueryData(
+          "getTransactions",
+          { currentMonth: 3, currentYear: 2026, limit: 20 },
+          {
+            data: [],
+            page: 1,
+            totalPages: 1,
+            totalElements: 0,
+          } as any,
+        ),
+      );
+    });
+
+    expect(Object.keys(store.getState().api.queries).length).toBeGreaterThan(0);
+
+    await renderer.act(async () => {
+      captured.current!.handleCurrencySelect("EUR");
+      await flush();
+    });
+
+    expect(userAPI.hasAnyTransactions).toHaveBeenCalled();
+    expect(userAPI.updateCurrency).toHaveBeenCalledWith("EUR");
+    expect(clearRatesCache).toHaveBeenCalled();
+    expect(store.getState().user.user?.currency).toBe("EUR");
+    // resetApiState must have wiped the RTK Query cache
+    expect(Object.keys(store.getState().api.queries).length).toBe(0);
+  });
+
+  it("ignores selection if same currency is selected", async () => {
+    const { captured } = setup();
+
+    await renderer.act(async () => {
+      captured.current!.handleCurrencySelect("USD");
+      await flush();
+    });
+
+    expect(userAPI.hasAnyTransactions).not.toHaveBeenCalled();
+    expect(userAPI.updateCurrency).not.toHaveBeenCalled();
   });
 });

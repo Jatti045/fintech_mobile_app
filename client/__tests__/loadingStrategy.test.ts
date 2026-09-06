@@ -746,6 +746,36 @@ describe("Cold-start hydration — hydrateApiCache", () => {
     ).toHaveLength(1);
   });
 
+  it("seeded getTransactions key matches the key Home subscribes to", async () => {
+    await seedAsyncStorage({ tx: true, budget: false });
+
+    mockedTxFetch.mockResolvedValue(
+      txEnvelope([{ id: "revalidated-tx", name: "Authoritative", amount: 50 }]),
+    );
+
+    const store = makeStore();
+    await hydrateApiCache(store as any);
+
+    const keysBeforeSubscription = queryKeys(store).filter((k) =>
+      k.includes("getTransactions"),
+    );
+    expect(keysBeforeSubscription).toHaveLength(1);
+
+    // Simulate Home subscribing — must hit the seeded entry
+    const homeReq = store.dispatch(
+      api.endpoints.getTransactions.initiate(
+        homeTransactionArgs(SEED_MONTH, SEED_YEAR),
+      ),
+    );
+    await homeReq.unwrap();
+    homeReq.unsubscribe();
+
+    // Still exactly one getTransactions cache entry — seeded key == subscription key.
+    expect(
+      queryKeys(store).filter((k) => k.includes("getTransactions")),
+    ).toHaveLength(1);
+  });
+
   it("does not seed anything when no user is stored (unauthenticated cold start)", async () => {
     // No USER_DATA_STORAGE_KEY entry → getStoredUserId returns null → no-op.
     const store = makeStore();
@@ -836,15 +866,89 @@ describe("Cache behavior — RTK Query invariants", () => {
     expect(state.customCache).toBeUndefined();
   });
 
-  it("defaultTransactionArgs produces the expected shape (0-based month, empty search, page 1)", () => {
+  it("defaultTransactionArgs produces the expected shape (0-based month, empty search, page 1, canonical limit)", () => {
     const args = defaultTransactionArgs(8, 2026);
     expect(args).toEqual({
       currentMonth: 8,
       currentYear: 2026,
       searchQuery: "",
       page: 1,
+      limit: 20,
     });
     // Must use 0-based month — no +1 offset.
     expect(args.currentMonth).toBe(8);
+    expect(args.limit).toBe(20);
+  });
+
+  it("semantically equivalent transaction query args produce identical cache entries", async () => {
+    mockedTxFetch.mockResolvedValue(
+      txApiResponse([{ id: "tx-canon", name: "Canon", amount: 20 }]),
+    );
+    const store = makeStore();
+
+    // Subscribe with defaultTransactionArgs
+    const req1 = store.dispatch(
+      api.endpoints.getTransactions.initiate(defaultTransactionArgs(4, 2026)),
+    );
+    await req1.unwrap();
+    req1.unsubscribe();
+
+    expect(
+      queryKeys(store).filter((k) => k.includes("getTransactions")),
+    ).toHaveLength(1);
+
+    // Lookups with different representations of default limit all hit the exact same entry
+    const explicit20 = api.endpoints.getTransactions.select({
+      currentMonth: 4,
+      currentYear: 2026,
+      searchQuery: "",
+      page: 1,
+      limit: 20,
+    })(store.getState());
+
+    const undefinedLimit = api.endpoints.getTransactions.select({
+      currentMonth: 4,
+      currentYear: 2026,
+      searchQuery: "",
+      page: 1,
+      limit: undefined,
+    })(store.getState());
+
+    const nullLimit = api.endpoints.getTransactions.select({
+      currentMonth: 4,
+      currentYear: 2026,
+      searchQuery: "",
+      page: 1,
+      limit: null as any,
+    })(store.getState());
+
+    const omittedLimit = api.endpoints.getTransactions.select({
+      currentMonth: 4,
+      currentYear: 2026,
+      searchQuery: "",
+      page: 1,
+    })(store.getState());
+
+    expect(explicit20.data?.transaction[0].id).toBe("tx-canon");
+    expect(undefinedLimit.data?.transaction[0].id).toBe("tx-canon");
+    expect(nullLimit.data?.transaction[0].id).toBe("tx-canon");
+    expect(omittedLimit.data?.transaction[0].id).toBe("tx-canon");
+
+    // Subscribing with explicit 20 does not create a new cache entry
+    const req2 = store.dispatch(
+      api.endpoints.getTransactions.initiate({
+        currentMonth: 4,
+        currentYear: 2026,
+        searchQuery: "",
+        page: 1,
+        limit: 20,
+      }),
+    );
+    await req2.unwrap();
+    req2.unsubscribe();
+
+    expect(
+      queryKeys(store).filter((k) => k.includes("getTransactions")),
+    ).toHaveLength(1);
   });
 });

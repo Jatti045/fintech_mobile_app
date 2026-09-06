@@ -4,6 +4,7 @@ import budgetAPI from "@/api/budget";
 import financialSummaryAPI from "@/api/financialSummary";
 import recurringAPI from "@/api/recurring";
 import insightAPI from "@/api/insight";
+import { PAGINATION_LIMIT } from "@/constants/appConfig";
 import type {
   ITransaction,
   ITransactionPagination,
@@ -174,7 +175,7 @@ export const api = createApi({
             minAmount: args.minAmount ?? null,
             maxAmount: args.maxAmount ?? null,
             page: args.page ?? 1,
-            limit: args.limit,
+            limit: args.limit == null ? PAGINATION_LIMIT : args.limit,
           });
           const rawTransactions = response.data?.transaction ?? [];
           const normalized = rawTransactions.map((t: any) => ({
@@ -193,6 +194,7 @@ export const api = createApi({
       },
       serializeQueryArgs: ({ endpointName, queryArgs }) => {
         const a = queryArgs as GetTransactionsArgs;
+        const canonicalLimit = a.limit == null ? PAGINATION_LIMIT : a.limit;
         return `${endpointName}(${JSON.stringify([
           a.currentYear,
           a.currentMonth,
@@ -202,7 +204,7 @@ export const api = createApi({
           a.maxAmount ?? null,
           a.startDate ?? null,
           a.endDate ?? null,
-          a.limit ?? null,
+          canonicalLimit,
         ])})`;
       },
       merge: mergeTransactions,
@@ -539,11 +541,13 @@ export const {
 export const defaultTransactionArgs = (
   month: number,
   year: number,
+  limit: number = PAGINATION_LIMIT,
 ): GetTransactionsArgs => ({
   currentMonth: month,
   currentYear: year,
   searchQuery: "",
   page: 1,
+  limit,
 });
 
 export default api;

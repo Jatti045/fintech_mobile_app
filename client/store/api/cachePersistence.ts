@@ -1,11 +1,8 @@
 import { createListenerMiddleware } from "@reduxjs/toolkit";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import api from "./apiSlice";
-import type {
-  GetTransactionsArgs,
-  TransactionsEnvelope,
-} from "./apiSlice";
-import { monthTagId } from "./apiSlice";
+import type { GetTransactionsArgs, TransactionsEnvelope } from "./apiSlice";
+import { monthTagId, defaultTransactionArgs } from "./apiSlice";
 import { USER_DATA_STORAGE_KEY } from "@/constants/storageKeys";
 import { logger } from "@/utils/logger";
 
@@ -128,12 +125,7 @@ export const hydrateApiCache = async (store: {
         store.dispatch(
           api.util.upsertQueryData(
             "getTransactions",
-            {
-              currentMonth: month,
-              currentYear: year,
-              searchQuery: "",
-              page: 1,
-            },
+            defaultTransactionArgs(month, year),
             parsed as TransactionsEnvelope,
           ),
         );

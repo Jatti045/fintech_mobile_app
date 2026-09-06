@@ -555,3 +555,135 @@ describe("Smart Month Setup", () => {
     });
   });
 });
+
+describe("getTransactions – canonical query arguments & cache keys", () => {
+  it("canonicalizes omitted, undefined, null, and explicit limit to identical cache entry", async () => {
+    mockedTxFetch.mockResolvedValue(txResponse([makeTx("tx-canon-1")]));
+    const store = makeStore();
+
+    // 1. Omitted limit
+    const req1 = store.dispatch(
+      api.endpoints.getTransactions.initiate({
+        currentMonth: 4,
+        currentYear: 2026,
+        searchQuery: "",
+        page: 1,
+      }),
+    );
+    await req1.unwrap();
+    req1.unsubscribe();
+
+    expect(mockedTxFetch).toHaveBeenCalledTimes(1);
+    expect(mockedTxFetch).toHaveBeenLastCalledWith(
+      expect.objectContaining({ limit: 20 }),
+    );
+
+    // 2. Explicit limit: 20 (must hit existing cache entry, no duplicate fetch)
+    const req2 = store.dispatch(
+      api.endpoints.getTransactions.initiate({
+        currentMonth: 4,
+        currentYear: 2026,
+        searchQuery: "",
+        page: 1,
+        limit: 20,
+      }),
+    );
+    await req2.unwrap();
+    req2.unsubscribe();
+    expect(mockedTxFetch).toHaveBeenCalledTimes(1);
+
+    // 3. limit: undefined (must hit existing cache entry, no duplicate fetch)
+    const req3 = store.dispatch(
+      api.endpoints.getTransactions.initiate({
+        currentMonth: 4,
+        currentYear: 2026,
+        searchQuery: "",
+        page: 1,
+        limit: undefined,
+      }),
+    );
+    await req3.unwrap();
+    req3.unsubscribe();
+    expect(mockedTxFetch).toHaveBeenCalledTimes(1);
+
+    // 4. limit: null (must hit existing cache entry, no duplicate fetch)
+    const req4 = store.dispatch(
+      api.endpoints.getTransactions.initiate({
+        currentMonth: 4,
+        currentYear: 2026,
+        searchQuery: "",
+        page: 1,
+        limit: null as any,
+      }),
+    );
+    await req4.unwrap();
+    req4.unsubscribe();
+    expect(mockedTxFetch).toHaveBeenCalledTimes(1);
+
+    // Exactly one cache entry in store
+    const queryKeys = Object.keys(store.getState().api.queries);
+    expect(queryKeys.filter((k) => k.includes("getTransactions"))).toHaveLength(
+      1,
+    );
+  });
+
+  it("preserves distinct cache entries when a different limit is requested", async () => {
+    mockedTxFetch.mockResolvedValue(txResponse([makeTx("tx-custom")]));
+    const store = makeStore();
+
+    const reqDefault = store.dispatch(
+      api.endpoints.getTransactions.initiate({
+        currentMonth: 4,
+        currentYear: 2026,
+        searchQuery: "",
+        page: 1,
+      }),
+    );
+    await reqDefault.unwrap();
+    reqDefault.unsubscribe();
+
+    const reqCustom = store.dispatch(
+      api.endpoints.getTransactions.initiate({
+        currentMonth: 4,
+        currentYear: 2026,
+        searchQuery: "",
+        page: 1,
+        limit: 10,
+      }),
+    );
+    await reqCustom.unwrap();
+    reqCustom.unsubscribe();
+
+    expect(mockedTxFetch).toHaveBeenCalledTimes(2);
+    expect(mockedTxFetch).toHaveBeenLastCalledWith(
+      expect.objectContaining({ limit: 10 }),
+    );
+
+    const queryKeys = Object.keys(store.getState().api.queries);
+    expect(queryKeys.filter((k) => k.includes("getTransactions"))).toHaveLength(
+      2,
+    );
+  });
+
+  it("resetApiState completely wipes query cache", async () => {
+    mockedTxFetch.mockResolvedValue(txResponse([makeTx("tx-wipe")]));
+    const store = makeStore();
+
+    const req = store.dispatch(
+      api.endpoints.getTransactions.initiate({
+        currentMonth: 4,
+        currentYear: 2026,
+        searchQuery: "",
+        page: 1,
+      }),
+    );
+    await req.unwrap();
+    req.unsubscribe();
+
+    expect(Object.keys(store.getState().api.queries)).toHaveLength(1);
+
+    store.dispatch(api.util.resetApiState());
+
+    expect(Object.keys(store.getState().api.queries)).toHaveLength(0);
+  });
+});

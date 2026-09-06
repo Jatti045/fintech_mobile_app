@@ -189,9 +189,27 @@ public class UserService {
         }
 
         String normalizedCurrency = request.currency().trim().toUpperCase(Locale.ROOT);
-        user.setCurrency(normalizedCurrency);
-        User updatedUser = userRepository.save(user);
-        return new UserDataResponse(true, "Currency updated successfully.", toUserSummary(updatedUser));
+        if (!normalizedCurrency.matches("^[A-Z]{3}$")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid currency code");
+        }
+
+        if (!normalizedCurrency.equals(user.getCurrency())) {
+            if (transactionRepository.existsByUser_Id(user.getId())) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Cannot change currency when transactions already exist.");
+            }
+
+            user.setCurrency(normalizedCurrency);
+            User updatedUser = userRepository.save(user);
+
+            cacheInvalidator.evictFinancialSummaryRegion(user.getId());
+            cacheInvalidator.evictRecurringPayments(user.getId());
+
+            return new UserDataResponse(true, "Currency updated successfully.", toUserSummary(updatedUser));
+        }
+
+        return new UserDataResponse(true, "Currency updated successfully.", toUserSummary(user));
     }
 
     @Transactional

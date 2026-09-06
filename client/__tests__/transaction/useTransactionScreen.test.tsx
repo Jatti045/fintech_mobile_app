@@ -259,7 +259,12 @@ beforeEach(async () => {
   mockedBudgetFetch.mockResolvedValue({ success: true, data: [] });
   (financialSummaryApi.fetchSummary as jest.Mock).mockResolvedValue({
     success: true,
-    data: { totalAmount: 0, monthlyIncome: 0, actualIncome: 0, expectedIncome: 0 },
+    data: {
+      totalAmount: 0,
+      monthlyIncome: 0,
+      actualIncome: 0,
+      expectedIncome: 0,
+    },
   });
 });
 
@@ -301,7 +306,7 @@ describe("useTransactionScreen", () => {
     // Let the debounce fire so the search fetch is genuinely in flight.
     const gate = gatedResponse(txEnvelope([]));
     mockedTxFetch.mockReturnValue(gate.promise);
-    await until(() => mockedTxFetch.mock.calls.length >= 3);
+    await until(() => mockedTxFetch.mock.calls.length >= 2);
 
     // While the clear-search fetch is still loading, the initial skeleton
     // must stay suppressed (no spinner in listEmpty).
@@ -329,10 +334,20 @@ describe("useTransactionScreen", () => {
     mockedTxFetch.mockImplementation(async (args: any) =>
       args?.budgetId
         ? txEnvelope([
-            makeTx({ id: "budget-row", name: "Bacon", category: "Food", budgetId: "b-1" }),
+            makeTx({
+              id: "budget-row",
+              name: "Bacon",
+              category: "Food",
+              budgetId: "b-1",
+            }),
           ])
         : txEnvelope([
-            makeTx({ id: "all-row", name: "Coffee", category: "Food", budgetId: "b-1" }),
+            makeTx({
+              id: "all-row",
+              name: "Coffee",
+              category: "Food",
+              budgetId: "b-1",
+            }),
           ]),
     );
     const { captured, store } = await setup();
@@ -379,7 +394,9 @@ describe("useTransactionScreen", () => {
     const { captured, store } = await setup();
 
     const gate = gatedResponse(
-      txEnvelope([makeTx({ id: "t-f", name: "Salad", category: "Food", budgetId: "b-9" })]),
+      txEnvelope([
+        makeTx({ id: "t-f", name: "Salad", category: "Food", budgetId: "b-9" }),
+      ]),
     );
     mockedTxFetch.mockReturnValue(gate.promise);
 
@@ -388,7 +405,9 @@ describe("useTransactionScreen", () => {
     });
     // The new cache entry has no data yet and the request is in flight, so
     // the standard loader (isInitialLoading) must render — not an overlay.
-    await until(() => txQueries(store).some((q: any) => q.status === "pending"));
+    await until(() =>
+      txQueries(store).some((q: any) => q.status === "pending"),
+    );
     renderer.act(() => {
       renderer.create(captured.current!.listEmpty);
     });
@@ -399,7 +418,14 @@ describe("useTransactionScreen", () => {
 
     renderer.act(() => {
       gate.resolve(
-        txEnvelope([makeTx({ id: "t-f", name: "Salad", category: "Food", budgetId: "b-9" })]),
+        txEnvelope([
+          makeTx({
+            id: "t-f",
+            name: "Salad",
+            category: "Food",
+            budgetId: "b-9",
+          }),
+        ]),
       );
     });
     await until(() => txSettled(store));
@@ -439,7 +465,9 @@ describe("useTransactionScreen", () => {
   it("serves a previously-fetched filter set from cache without refetching", async () => {
     mockedTxFetch.mockImplementation(async (args: any) =>
       args?.budgetId
-        ? txEnvelope([makeTx({ id: "budget-row", name: "Bacon", budgetId: "b-1" })])
+        ? txEnvelope([
+            makeTx({ id: "budget-row", name: "Bacon", budgetId: "b-1" }),
+          ])
         : txEnvelope([makeTx({ id: "all-row", name: "Coffee" })]),
     );
     const { captured } = await setup();
@@ -656,9 +684,9 @@ describe("useTransactionScreen", () => {
     });
 
     const entryWith = (): any =>
-      (
-        Object.values((store.getState() as any).api.queries) as any[]
-      ).find((q: any) => q.endpointName === "getTransactions");
+      (Object.values((store.getState() as any).api.queries) as any[]).find(
+        (q: any) => q.endpointName === "getTransactions",
+      );
     const ids = () => entryWith()?.data?.transaction?.map((t: any) => t.id);
 
     await until(() => entryWith()?.data?.pagination?.hasNextPage === true);
