@@ -93,7 +93,8 @@ public class TransactionService {
 
         String category = normalizeOptional(params.category());
         if (StringUtils.hasText(category)) {
-            spec = spec.and((root, query, cb) -> cb.equal(root.get("category"), category));
+            spec = spec.and(
+                    (root, query, cb) -> cb.equal(cb.lower(root.get("category")), category.toLowerCase(Locale.ROOT)));
         }
 
         String budgetId = normalizeOptional(params.budgetId());
@@ -102,6 +103,30 @@ public class TransactionService {
         }
 
         spec = applyCurrentMonthYearFilter(spec, params.currentMonth(), params.currentYear());
+
+        Instant startDateInstant = parseStartDate(params.startDate());
+        if (startDateInstant != null) {
+            spec = spec.and((root, query, cb) -> cb.greaterThanOrEqualTo(root.get("date"), startDateInstant));
+        }
+
+        DateBoundary endBoundary = parseEndDate(params.endDate());
+        if (endBoundary != null) {
+            if (endBoundary.isDateOnly()) {
+                spec = spec.and((root, query, cb) -> cb.lessThan(root.get("date"), endBoundary.instant()));
+            } else {
+                spec = spec.and((root, query, cb) -> cb.lessThanOrEqualTo(root.get("date"), endBoundary.instant()));
+            }
+        }
+
+        Double minAmount = parseDouble(params.minAmount(), "minAmount");
+        if (minAmount != null) {
+            spec = spec.and((root, query, cb) -> cb.greaterThanOrEqualTo(root.get("amount"), minAmount));
+        }
+
+        Double maxAmount = parseDouble(params.maxAmount(), "maxAmount");
+        if (maxAmount != null) {
+            spec = spec.and((root, query, cb) -> cb.lessThanOrEqualTo(root.get("amount"), maxAmount));
+        }
 
         String searchQuery = normalizeOptional(params.searchQuery());
         if (StringUtils.hasText(searchQuery)) {
@@ -129,7 +154,9 @@ public class TransactionService {
                         category,
                         normalizeOptional(params.startDate()),
                         normalizeOptional(params.endDate()),
-                        budgetId));
+                        budgetId,
+                        minAmount,
+                        maxAmount));
 
         return new TransactionsResponse(true, "Transactions retrieved successfully", data);
     }
@@ -224,7 +251,7 @@ public class TransactionService {
         transaction.setUser(user);
         transaction.setName(request.name().trim());
         transaction.setDate(transactionDate);
-        transaction.setCategory(request.category().trim());
+        transaction.setCategory(CategoryNormalizer.normalize(request.category()));
         transaction.setType(type);
         transaction.setAmount(normalizedAmount);
         transaction.setBaseCurrency(baseCurrency);
@@ -442,7 +469,7 @@ public class TransactionService {
             existing.setDate(newDate);
         }
         if (request.category() != null) {
-            existing.setCategory(request.category().trim());
+            existing.setCategory(CategoryNormalizer.normalize(request.category()));
         } else if (newBudget != null) {
             existing.setCategory(newBudget.getCategory());
         }
@@ -602,6 +629,72 @@ public class TransactionService {
         }
 
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid date format");
+    }
+
+    private record DateBoundary(Instant instant, boolean isDateOnly) {
+    }
+
+    private Instant parseStartDate(String rawDate) {
+        if (!StringUtils.hasText(rawDate)) {
+            return null;
+        }
+
+        String normalized = rawDate.trim();
+        try {
+            return Instant.parse(normalized);
+        } catch (Exception ignored) {
+        }
+
+        try {
+            return LocalDate.parse(normalized).atStartOfDay().toInstant(ZoneOffset.UTC);
+        } catch (Exception ignored) {
+        }
+
+        try {
+            return LocalDateTime.parse(normalized).toInstant(ZoneOffset.UTC);
+        } catch (Exception ignored) {
+        }
+
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid startDate format");
+    }
+
+    private DateBoundary parseEndDate(String rawDate) {
+        if (!StringUtils.hasText(rawDate)) {
+            return null;
+        }
+
+        String normalized = rawDate.trim();
+        if (normalized.contains("T")) {
+            try {
+                return new DateBoundary(Instant.parse(normalized), false);
+            } catch (Exception ignored) {
+            }
+
+            try {
+                return new DateBoundary(LocalDateTime.parse(normalized).toInstant(ZoneOffset.UTC), false);
+            } catch (Exception ignored) {
+            }
+        } else {
+            try {
+                LocalDate date = LocalDate.parse(normalized);
+                return new DateBoundary(date.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC), true);
+            } catch (Exception ignored) {
+            }
+        }
+
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid endDate format");
+    }
+
+    private Double parseDouble(String raw, String paramName) {
+        if (!StringUtils.hasText(raw)) {
+            return null;
+        }
+
+        try {
+            return Double.parseDouble(raw.trim());
+        } catch (NumberFormatException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid " + paramName + " format");
+        }
     }
 
     private Instant monthStart(int year, int month) {

@@ -46,7 +46,9 @@ public class TransactionController {
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
             @RequestParam(required = false) String budgetId,
-            @RequestParam(required = false) String searchQuery) {
+            @RequestParam(required = false) String searchQuery,
+            @RequestParam(required = false) String minAmount,
+            @RequestParam(required = false) String maxAmount) {
         return transactionService.getTransactions(
                 authenticatedUser,
                 new TransactionQueryParams(
@@ -59,7 +61,9 @@ public class TransactionController {
                         startDate,
                         endDate,
                         budgetId,
-                        searchQuery));
+                        searchQuery,
+                        minAmount,
+                        maxAmount));
     }
 
     @PostMapping

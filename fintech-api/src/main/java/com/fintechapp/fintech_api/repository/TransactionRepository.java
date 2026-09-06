@@ -69,11 +69,11 @@ public interface TransactionRepository
          * conservative suggested limits from completed-month spending. Categories
          * with no expense activity in the window simply have no row.
          */
-        @Query("SELECT t.category AS category, COALESCE(SUM(t.amount), 0) AS total "
+        @Query("SELECT LOWER(t.category) AS category, COALESCE(SUM(t.amount), 0) AS total "
                         + "FROM Transaction t "
                         + "WHERE t.user.id = :userId AND t.type = :type AND t.date >= :from AND t.date < :to "
                         + "AND t.transfer = false "
-                        + "GROUP BY t.category")
+                        + "GROUP BY LOWER(t.category)")
         List<CategoryTotal> sumAmountByUserAndTypeGroupedByCategory(
                         @Param("userId") String userId,
                         @Param("type") TransactionType type,

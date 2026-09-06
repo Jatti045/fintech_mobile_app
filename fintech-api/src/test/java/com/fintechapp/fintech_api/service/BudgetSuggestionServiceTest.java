@@ -73,10 +73,13 @@ class BudgetSuggestionServiceTest {
         return ct;
     }
 
-    /** Stubs the budget repo so target month returns {@code target} and other months {@code rest}. */
+    /**
+     * Stubs the budget repo so target month returns {@code target} and other months
+     * {@code rest}.
+     */
     private void stubBudgets(int targetMonthIdx, List<Budget> target, List<Budget> rest) {
         lenient().when(budgetRepository.findByUser_IdAndDateGreaterThanEqualAndDateLessThanOrderByDateDesc(
-                        eq("user-1"), any(Instant.class), any(Instant.class)))
+                eq("user-1"), any(Instant.class), any(Instant.class)))
                 .thenAnswer(invocation -> {
                     int idx = monthIdx(invocation.getArgument(1));
                     // Previous month = target - 1.
@@ -90,10 +93,13 @@ class BudgetSuggestionServiceTest {
                 });
     }
 
-    /** Stubs the grouped-spend repo to return {@code perMonthTotals} for completed sample months. */
+    /**
+     * Stubs the grouped-spend repo to return {@code perMonthTotals} for completed
+     * sample months.
+     */
     private void stubSpend(java.util.Map<Integer, List<CategoryTotal>> perMonthTotals) {
         lenient().when(transactionRepository.sumAmountByUserAndTypeGroupedByCategory(
-                        eq("user-1"), eq(TransactionType.EXPENSE), any(Instant.class), any(Instant.class)))
+                eq("user-1"), eq(TransactionType.EXPENSE), any(Instant.class), any(Instant.class)))
                 .thenAnswer(invocation -> {
                     int idx = monthIdx(invocation.getArgument(2));
                     return perMonthTotals.getOrDefault(idx, List.of());
@@ -109,8 +115,8 @@ class BudgetSuggestionServiceTest {
 
     @Test
     void roundSuggestion_roundsUpByTier() {
-        assertEquals(8, BudgetSuggestionService.roundSuggestion(8));     // <10 → nearest 1
-        assertEquals(15, BudgetSuggestionService.roundSuggestion(13));   // <50 → nearest 5
+        assertEquals(8, BudgetSuggestionService.roundSuggestion(8)); // <10 → nearest 1
+        assertEquals(15, BudgetSuggestionService.roundSuggestion(13)); // <50 → nearest 5
         assertEquals(120, BudgetSuggestionService.roundSuggestion(113)); // <200 → nearest 10
         assertEquals(425, BudgetSuggestionService.roundSuggestion(404)); // <1000 → nearest 25
         assertEquals(500, BudgetSuggestionService.roundSuggestion(498)); // <1000 → nearest 25 yields 500
@@ -156,7 +162,8 @@ class BudgetSuggestionServiceTest {
     @Test
     void suggests_historicalSpending_usingRoundedMedian() {
         stubBudgets(5, List.of(), List.of()); // no previous budgets → estimate path
-        // Two completed months (March and April): 421 & 433 → median 427 → round 450 (100-999 tier).
+        // Two completed months (March and April): 421 & 433 → median 427 → round 450
+        // (100-999 tier).
         stubSpend(java.util.Map.of(
                 2, List.of(total("Groceries", 421.0)),
                 3, List.of(total("Groceries", 433.0))));
@@ -205,7 +212,7 @@ class BudgetSuggestionServiceTest {
 
     @Test
     void marksInTargetAutoCreatedBudget_withSpentPreserved() {
-        Budget inTarget = budget("Food", 0, true, 42);    // $0 auto-created, $42 spent
+        Budget inTarget = budget("Food", 0, true, 42); // $0 auto-created, $42 spent
         Budget prevFood = budget("Food", 300, false, 0);
         stubBudgets(5, List.of(inTarget), List.of(prevFood));
 
@@ -216,5 +223,36 @@ class BudgetSuggestionServiceTest {
         assertTrue(food.autoCreated());
         assertEquals(42, food.spentToDate());
         assertEquals(300, food.suggestedLimit());
+    }
+
+    @Test
+    void suggests_historicalSpending_normalizesCategoryToCanonicalTitleCase() {
+        stubBudgets(5, List.of(), List.of());
+        stubSpend(java.util.Map.of(
+                2, List.of(total("groceries", 421.0)),
+                3, List.of(total("groceries", 433.0))));
+
+        Data data = service.suggestForUser("user-1", 2026, 5, now);
+
+        assertEquals(1, data.suggestions().size());
+        Item groceries = data.suggestions().get(0);
+        assertEquals("Groceries", groceries.category());
+        assertEquals(450, groceries.suggestedLimit());
+    }
+
+    @Test
+    void suggests_matchesTargetAutoCreatedBudgetCaseInsensitively() {
+        Budget inTarget = budget("food", 0, true, 42); // lowercase in target
+        Budget prevFood = budget("Food", 300, false, 0); // uppercase in previous
+        stubBudgets(5, List.of(inTarget), List.of(prevFood));
+
+        Data data = service.suggestForUser("user-1", 2026, 5, now);
+
+        Item food = item(data, "Food");
+        assertEquals(inTarget.getId(), food.existingBudgetId());
+        assertTrue(food.autoCreated());
+        assertEquals(42, food.spentToDate());
+        assertEquals(300, food.suggestedLimit());
+        assertEquals("Food", food.category());
     }
 }

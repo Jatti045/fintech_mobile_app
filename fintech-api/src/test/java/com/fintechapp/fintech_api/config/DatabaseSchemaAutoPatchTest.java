@@ -35,10 +35,12 @@ class DatabaseSchemaAutoPatchTest {
         assertTrue(executedSql.stream().anyMatch(sql -> sql.contains("DROP TABLE IF EXISTS goal_allocations")));
         assertTrue(executedSql.stream().anyMatch(sql -> sql.contains("DROP COLUMN IF EXISTS goal_id")));
         assertTrue(executedSql.stream().anyMatch(sql -> sql.contains("DROP CONSTRAINT IF EXISTS fk_transaction_goal")));
-        // Budget uniqueness invariant (V18): duplicate reconciliation plus the
-        // unique constraint.
+        // Budget uniqueness invariant (V18/V19): duplicate reconciliation plus the
+        // unique constraint and case-insensitive unique index.
         assertTrue(executedSql.stream().anyMatch(sql -> sql.contains("uq_budgets_user_category_month")));
         assertTrue(executedSql.stream().anyMatch(sql -> sql.contains("UNIQUE (user_id, category, date)")));
+        assertTrue(executedSql.stream().anyMatch(sql -> sql.contains("uq_budgets_user_category_month_ci")));
+        assertTrue(executedSql.stream().anyMatch(sql -> sql.contains("LOWER(TRIM(category))")));
         assertTrue(executedSql.stream().anyMatch(sql -> sql.contains("sync_lock_token")));
         assertTrue(executedSql.stream().anyMatch(sql -> sql.contains("sync_lock_expires_at")));
     }

@@ -42,8 +42,7 @@ public class BudgetService {
     public BudgetService(
             BudgetRepository budgetRepository,
             TransactionRepository transactionRepository,
-            UserRepository userRepository
-    ) {
+            UserRepository userRepository) {
         this.budgetRepository = budgetRepository;
         this.transactionRepository = transactionRepository;
         this.userRepository = userRepository;
@@ -69,12 +68,16 @@ public class BudgetService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Category and limit are required");
         }
 
-        boolean exists = budgetRepository.existsByUser_IdAndCategoryAndDateGreaterThanEqualAndDateLessThan(
+        String canonicalCategory = CategoryNormalizer.normalize(request.category());
+        if (canonicalCategory == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Category and limit are required");
+        }
+
+        boolean exists = budgetRepository.existsByUser_IdAndCategoryIgnoreCaseAndDateGreaterThanEqualAndDateLessThan(
                 userId,
-                request.category().trim(),
+                canonicalCategory,
                 monthStart,
-                nextMonthStart
-        );
+                nextMonthStart);
 
         if (exists) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Budget for this category already exists");
@@ -85,7 +88,7 @@ public class BudgetService {
 
         Budget budget = new Budget();
         budget.setUser(user);
-        budget.setCategory(request.category().trim());
+        budget.setCategory(canonicalCategory);
         budget.setLimit(request.limit());
         budget.setDate(monthStart);
         budget.setAutoCreated(false); // manual budgets always start budgeted
@@ -131,8 +134,7 @@ public class BudgetService {
         if (attachedCount > 0) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Cannot delete budget: there are transactions attached to this budget. Remove or reassign those transactions first."
-            );
+                    "Cannot delete budget: there are transactions attached to this budget. Remove or reassign those transactions first.");
         }
 
         budgetRepository.delete(budget);
@@ -143,8 +145,7 @@ public class BudgetService {
     public BudgetDataResponse updateBudget(
             AuthenticatedUser authenticatedUser,
             String budgetId,
-            UpdateBudgetRequest request
-    ) {
+            UpdateBudgetRequest request) {
         String userId = requireUserId(authenticatedUser);
 
         if (!StringUtils.hasText(budgetId)) {
@@ -158,8 +159,7 @@ public class BudgetService {
         Budget existing = budgetRepository.findByIdAndUser_Id(budgetId, userId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
-                        "Budget not found or doesn't belong to user"
-                ));
+                        "Budget not found or doesn't belong to user"));
 
         int newMonth = request.month() != null
                 ? request.month()
@@ -168,10 +168,14 @@ public class BudgetService {
                 ? request.year()
                 : LocalDate.ofInstant(existing.getDate(), ZoneOffset.UTC).getYear();
         String newCategory = request.category() != null
-                ? request.category().trim()
+                ? CategoryNormalizer.normalize(request.category())
                 : existing.getCategory();
 
-        boolean categoryOrDateChanged = !newCategory.equals(existing.getCategory())
+        if (request.category() != null && newCategory == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Category cannot be empty");
+        }
+
+        boolean categoryOrDateChanged = !newCategory.equalsIgnoreCase(existing.getCategory())
                 || newMonth != LocalDate.ofInstant(existing.getDate(), ZoneOffset.UTC).getMonthValue() - 1
                 || newYear != LocalDate.ofInstant(existing.getDate(), ZoneOffset.UTC).getYear();
 
@@ -179,19 +183,18 @@ public class BudgetService {
             Instant monthStart = monthStart(newYear, newMonth);
             Instant nextMonthStart = nextMonthStart(newYear, newMonth);
 
-            boolean conflict = budgetRepository.existsByUser_IdAndCategoryAndDateGreaterThanEqualAndDateLessThanAndIdNot(
-                    userId,
-                    newCategory,
-                    monthStart,
-                    nextMonthStart,
-                    budgetId
-            );
+            boolean conflict = budgetRepository
+                    .existsByUser_IdAndCategoryIgnoreCaseAndDateGreaterThanEqualAndDateLessThanAndIdNot(
+                            userId,
+                            newCategory,
+                            monthStart,
+                            nextMonthStart,
+                            budgetId);
 
             if (conflict) {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
-                        "Another budget with this category exists for the same month"
-                );
+                        "Another budget with this category exists for the same month");
             }
         }
 
@@ -202,8 +205,7 @@ public class BudgetService {
             if (request.limit() < existing.getSpent()) {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
-                        "Limit cannot be less than current spent amount. Adjust transactions before reducing the limit."
-                );
+                        "Limit cannot be less than current spent amount. Adjust transactions before reducing the limit.");
             }
             existing.setLimit(request.limit());
             // Assigning a limit clears the auto-created/unbudgeted flag.
@@ -226,24 +228,28 @@ public class BudgetService {
      * Applies a user-confirmed set of suggested budgets as one atomic,
      * idempotent transaction.
      *
-     * <p>Safety rules enforced server-side:</p>
+     * <p>
+     * Safety rules enforced server-side:
+     * </p>
      * <ul>
-     *   <li>a category already carrying a <b>manually configured</b> limit in
-     *   the target month is never overwritten — it is reported as skipped with
-     *   {@code ALREADY_BUDGETED};</li>
-     *   <li>an existing auto-created ($0 Plaid) placeholder for the category is
-     *   given the chosen limit, its {@code autoCreated} flag is cleared (the
-     *   existing convention from {@link #updateBudget}), and its accumulated
-     *   {@code spent} is preserved untouched;</li>
-     *   <li>duplicate categories within one request are applied once
-     *   (subsequent copies reported as {@code DUPLICATE_CATEGORY});</li>
-     *   <li>a category with no target-month row creates a new manual budget.</li>
+     * <li>a category already carrying a <b>manually configured</b> limit in
+     * the target month is never overwritten — it is reported as skipped with
+     * {@code ALREADY_BUDGETED};</li>
+     * <li>an existing auto-created ($0 Plaid) placeholder for the category is
+     * given the chosen limit, its {@code autoCreated} flag is cleared (the
+     * existing convention from {@link #updateBudget}), and its accumulated
+     * {@code spent} is preserved untouched;</li>
+     * <li>duplicate categories within one request are applied once
+     * (subsequent copies reported as {@code DUPLICATE_CATEGORY});</li>
+     * <li>a category with no target-month row creates a new manual budget.</li>
      * </ul>
      *
-     * <p>Calling this twice with the same payload is harmless: the second pass
+     * <p>
+     * Calling this twice with the same payload is harmless: the second pass
      * simply reports every category as {@code ALREADY_BUDGETED} and changes
      * nothing. Comparison is case-insensitive (matching Plaid ingestion and
-     * {@link BudgetController#getBudgets}).</p>
+     * {@link BudgetController#getBudgets}).
+     * </p>
      */
     @Transactional
     public ApplyBudgetSuggestionsResponse applyBudgetSuggestions(
@@ -279,15 +285,15 @@ public class BudgetService {
             if (item == null || item.category() == null) {
                 continue;
             }
-            String trimmed = item.category().trim();
-            if (trimmed.isEmpty() || item.limit() == null) {
+            String canonical = CategoryNormalizer.normalize(item.category());
+            if (canonical == null || item.limit() == null) {
                 continue;
             }
-            String key = trimmed.toLowerCase(Locale.ROOT);
+            String key = canonical.toLowerCase(Locale.ROOT);
 
             if (!written.add(key)) {
                 skipped.add(new ApplyBudgetSuggestionsResponse.SkippedItem(
-                        trimmed, item.limit(), "DUPLICATE_CATEGORY"));
+                        canonical, item.limit(), "DUPLICATE_CATEGORY"));
                 skippedCount++;
                 continue;
             }
@@ -306,7 +312,7 @@ public class BudgetService {
                         .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unauthorized"));
                 Budget budget = new Budget();
                 budget.setUser(user);
-                budget.setCategory(trimmed);
+                budget.setCategory(canonical);
                 budget.setLimit(item.limit());
                 budget.setDate(monthStart);
                 budget.setAutoCreated(false);
@@ -337,8 +343,7 @@ public class BudgetService {
                 budget.getSpent(),
                 budget.isAutoCreated(),
                 budget.getCreatedAt(),
-                budget.getUpdatedAt()
-        );
+                budget.getUpdatedAt());
     }
 
     private String requireUserId(AuthenticatedUser authenticatedUser) {
@@ -370,4 +375,3 @@ public class BudgetService {
                 .toInstant(ZoneOffset.UTC);
     }
 }
-

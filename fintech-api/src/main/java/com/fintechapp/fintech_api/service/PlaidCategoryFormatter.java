@@ -12,37 +12,22 @@ import org.springframework.util.StringUtils;
  * Sanitizes raw Plaid personal-finance category values into clean,
  * user-facing names.
  *
- * <p>Plaid returns either legacy coarse codes such as {@code FOOD_AND_DRINK}
+ * <p>
+ * Plaid returns either legacy coarse codes such as {@code FOOD_AND_DRINK}
  * or hierarchical values like {@code Travel:Air Travel}. Both are normalised
- * to readable Title Case, e.g. {@code FOOD_AND_DRINK} &rarr; {@code Food &amp; Drink}
+ * to readable Title Case, e.g. {@code FOOD_AND_DRINK} &rarr;
+ * {@code Food &amp; Drink}
  * and {@code TRAVEL:Air Travel} &rarr; {@code Travel / Air Travel}. The result
  * is what gets persisted on {@code transactions.category} and used as the
- * per-month budget category key.</p>
+ * per-month budget category key.
+ * </p>
  */
 @Component
 public class PlaidCategoryFormatter {
 
     public String toReadableCategory(String rawCategory) {
-        if (!StringUtils.hasText(rawCategory)) {
-            return "Other";
-        }
-
-        String sanitized = rawCategory.trim();
-
-        // Hierarchical Plaid values ("Food and Drink:Dining Out") → sections.
-        List<String> sections = new ArrayList<>();
-        for (String section : sanitized.split("[:,/|\\\\]")) {
-            String cleaned = titleCase(section.trim());
-            if (StringUtils.hasText(cleaned)) {
-                sections.add(cleaned);
-            }
-        }
-
-        if (sections.isEmpty()) {
-            return "Other";
-        }
-
-        return String.join(" / ", sections);
+        String normalized = CategoryNormalizer.normalize(rawCategory);
+        return normalized != null ? normalized : "Other";
     }
 
     private String titleCase(String raw) {
@@ -101,8 +86,10 @@ public class PlaidCategoryFormatter {
         return KNOWN_ACRONYMS.contains(stripped.toUpperCase(Locale.ROOT));
     }
 
-    /** Genuine acronyms to keep uppercase; category words like FOOD/RENT/PETS
-     *  are title-cased instead. */
+    /**
+     * Genuine acronyms to keep uppercase; category words like FOOD/RENT/PETS
+     * are title-cased instead.
+     */
     private static final Set<String> KNOWN_ACRONYMS = Set.of(
             "US", "UK", "EU", "CA", "TV", "ID", "ATM", "DVD", "GPS", "VR",
             "PC", "HD", "AC", "PS4", "PS5", "IRA", "RRSP", "TFSA", "HOA", "HVAC");

@@ -27,23 +27,6 @@ import jakarta.persistence.UniqueConstraint;
 @Table(name = "budgets", indexes = {
         @Index(name = "idx_budgets_user_date", columnList = "user_id,date"),
         @Index(name = "idx_budgets_user_category", columnList = "user_id,category")
-}, uniqueConstraints = {
-        /*
-         * Database-enforced invariant: at most one budget per (user, category,
-         * month). `date` always holds the first day of the month at 00:00 UTC,
-         * so this tuple is the app's identity of "user + category + month".
-         *
-         * Without it, two concurrent Plaid syncs for DIFFERENT items of the
-         * same user (the per-item sync lock does not serialize those) can both
-         * pass the check-then-insert lookup in
-         * PlaidTransactionIngestService.resolveOrCreateBudget and insert two
-         * budgets for the same category and month.
-         *
-         * Mirrored for existing databases by the V18 migration and
-         * DatabaseSchemaAutoPatch (this project does not run Flyway at boot).
-         */
-        @UniqueConstraint(name = "uq_budgets_user_category_month",
-                columnNames = {"user_id", "category", "date"})
 })
 /*
  * Dynamic updates are a correctness requirement here, not an optimization:

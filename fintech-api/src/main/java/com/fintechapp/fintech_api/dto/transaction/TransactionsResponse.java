@@ -53,6 +53,16 @@ public record TransactionsResponse(
                         String category,
                         String startDate,
                         String endDate,
-                        String budgetId) {
+                        String budgetId,
+                        Double minAmount,
+                        Double maxAmount) {
+                public Filters(
+                                String type,
+                                String category,
+                                String startDate,
+                                String endDate,
+                                String budgetId) {
+                        this(type, category, startDate, endDate, budgetId, null, null);
+                }
         }
 }

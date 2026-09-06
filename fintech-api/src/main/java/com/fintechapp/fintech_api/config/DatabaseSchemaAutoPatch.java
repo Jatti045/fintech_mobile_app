@@ -201,16 +201,16 @@ public class DatabaseSchemaAutoPatch implements ApplicationRunner {
                 """);
 
         // Budget uniqueness invariant: at most one budget per
-        // (user_id, category, date) — `date` holds the first day of
-        // the month at 00:00 UTC. V18 migration mirrors this patch.
+        // (user_id, category, date) — case-insensitively.
+        // V18 / V19 migrations mirror this patch.
         // Idempotent duplicate reconciliation FIRST (re-point
         // transactions to the deterministic keeper, merge spent,
-        // delete the duplicate rows), then the constraint itself.
+        // delete the duplicate rows), then the unique constraint and index.
         jdbcTemplate.execute("""
                 WITH ranked AS (
                     SELECT id, user_id, category, date, is_auto_created, created_at,
                            ROW_NUMBER() OVER (
-                               PARTITION BY user_id, category, date
+                               PARTITION BY user_id, LOWER(TRIM(category)), date
                                ORDER BY is_auto_created ASC, created_at ASC, id ASC
                            ) AS rn
                     FROM budgets
@@ -227,14 +227,14 @@ public class DatabaseSchemaAutoPatch implements ApplicationRunner {
                 SET budget_id = k.keeper_id, updated_at = NOW()
                 FROM dupe d
                 JOIN keeper k
-                  ON k.user_id = d.user_id AND k.category = d.category AND k.date = d.date
+                  ON k.user_id = d.user_id AND LOWER(TRIM(k.category)) = LOWER(TRIM(d.category)) AND k.date = d.date
                 WHERE t.budget_id = d.dupe_id
                 """);
         jdbcTemplate.execute("""
                 WITH ranked AS (
                     SELECT id, user_id, category, date, is_auto_created, created_at,
                            ROW_NUMBER() OVER (
-                               PARTITION BY user_id, category, date
+                               PARTITION BY user_id, LOWER(TRIM(category)), date
                                ORDER BY is_auto_created ASC, created_at ASC, id ASC
                            ) AS rn
                     FROM budgets
@@ -251,7 +251,7 @@ public class DatabaseSchemaAutoPatch implements ApplicationRunner {
                     SELECT k.keeper_id, COALESCE(SUM(b.spent), 0) AS dupe_spent
                     FROM dupe d
                     JOIN keeper k
-                      ON k.user_id = d.user_id AND k.category = d.category AND k.date = d.date
+                      ON k.user_id = d.user_id AND LOWER(TRIM(k.category)) = LOWER(TRIM(d.category)) AND k.date = d.date
                     JOIN budgets b ON b.id = d.dupe_id
                     GROUP BY k.keeper_id
                 )
@@ -264,7 +264,7 @@ public class DatabaseSchemaAutoPatch implements ApplicationRunner {
                 WITH ranked AS (
                     SELECT id, user_id, category, date, is_auto_created, created_at,
                            ROW_NUMBER() OVER (
-                               PARTITION BY user_id, category, date
+                               PARTITION BY user_id, LOWER(TRIM(category)), date
                                ORDER BY is_auto_created ASC, created_at ASC, id ASC
                            ) AS rn
                     FROM budgets
@@ -278,8 +278,17 @@ public class DatabaseSchemaAutoPatch implements ApplicationRunner {
                 WHERE b.id = d.dupe_id
                 """);
         jdbcTemplate.execute("""
+                -- Drops legacy UNIQUE (user_id, category, date) in favor of case-insensitive uniqueness
                 DO $$
                 BEGIN
+                    IF EXISTS (
+                        SELECT 1 FROM pg_constraint
+                        WHERE conname = 'uq_budgets_user_category_month'
+                          AND conrelid = 'budgets'::regclass
+                          AND contype = 'u'
+                    ) THEN
+                        ALTER TABLE budgets DROP CONSTRAINT uq_budgets_user_category_month;
+                    END IF;
                     IF NOT EXISTS (
                         SELECT 1
                         FROM pg_constraint
@@ -288,10 +297,14 @@ public class DatabaseSchemaAutoPatch implements ApplicationRunner {
                     ) THEN
                         ALTER TABLE budgets
                             ADD CONSTRAINT uq_budgets_user_category_month
-                            UNIQUE (user_id, category, date);
+                            CHECK (category IS NOT NULL);
                     END IF;
                 END
                 $$
+                """);
+        jdbcTemplate.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_budgets_user_category_month_ci
+                ON budgets (user_id, LOWER(TRIM(category)), date)
                 """);
 
         logger.info("Database schema patch check completed for user_monthly_incomes, plaid_items, transactions");

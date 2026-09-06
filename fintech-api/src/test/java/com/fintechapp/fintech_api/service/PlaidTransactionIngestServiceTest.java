@@ -52,7 +52,7 @@ class PlaidTransactionIngestServiceTest {
     private static final int IDX_PLAID_TX_ID = 9;
     private static final int IDX_PLAID_ACCOUNT_ID = 10;
     private static final int IDX_PLAID_ITEM_ID = 11;
-        private static final int IDX_IS_TRANSFER = 12;
+    private static final int IDX_IS_TRANSFER = 12;
     private static final int IDX_PLAID_PFC_DETAILED = 13;
     private static final int IDX_USER_ID = 14;
     private static final int IDX_BUDGET_ID = 15;
@@ -90,7 +90,7 @@ class PlaidTransactionIngestServiceTest {
         return u;
     }
 
-        private PlaidTransaction plaidTx(
+    private PlaidTransaction plaidTx(
             String id, String name, String category, double amount, Instant date,
             String iso, String unofficial) {
         return new PlaidTransaction(id, name, date, category, amount, false, iso, unofficial, null, null, null);
@@ -98,7 +98,8 @@ class PlaidTransactionIngestServiceTest {
 
     /** A transfer between the user's own accounts (e.g. Checking → Savings). */
     private PlaidTransaction plaidTransfer(String id, double amount, Instant date, String iso) {
-        return new PlaidTransaction(id, "Transfer", date, "Transfer", amount, true, iso, null, null, null, "TRANSFER_TRANSFER_ACCOUNT_TRANSFER");
+        return new PlaidTransaction(id, "Transfer", date, "Transfer", amount, true, iso, null, null, null,
+                "TRANSFER_TRANSFER_ACCOUNT_TRANSFER");
     }
 
     private void upsert(PlaidTransaction plaidTx) {
@@ -108,7 +109,7 @@ class PlaidTransactionIngestServiceTest {
     /** Stubs the full INSERT path: no budget, native insert succeeds. */
     private void stubNewTransactionInsert() {
         when(budgetRepository.findByUser_IdAndCategoryIgnoreCaseAndDateGreaterThanEqualAndDateLessThan(
-                        eq("user-1"), anyString(), any(Instant.class), any(Instant.class)))
+                eq("user-1"), anyString(), any(Instant.class), any(Instant.class)))
                 .thenReturn(Optional.empty());
         lenient().when(budgetRepository.save(any(Budget.class))).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(budgetRepository.saveAndFlush(any(Budget.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -213,20 +214,20 @@ class PlaidTransactionIngestServiceTest {
 
         String budgetUpsertSql = sqlCaptor.getAllValues().get(0);
         assertTrue(budgetUpsertSql.contains("INSERT INTO budgets"));
-        assertTrue(budgetUpsertSql.contains("ON CONFLICT (user_id, category, date) DO NOTHING"));
+        assertTrue(budgetUpsertSql.contains("ON CONFLICT (user_id, LOWER(TRIM(category)), date) DO NOTHING"));
 
         Object[] budgetArgs = argsCaptor.getAllValues().get(0);
         assertEquals(4, budgetArgs.length);
         assertEquals(java.sql.Timestamp.from(Instant.parse("2026-08-01T00:00:00Z")), budgetArgs[1]); // month start
-        assertEquals("Food & Drink", budgetArgs[2]);                                        // category
-        assertEquals("user-1", budgetArgs[3]);                                              // user id
+        assertEquals("Food & Drink", budgetArgs[2]); // category
+        assertEquals("user-1", budgetArgs[3]); // user id
     }
 
     @Test
     void upsertTransaction_persistsPlaidAccountIdAndPlaidItemId() {
         stubNewTransactionInsert();
 
-                PlaidTransaction plaidTx = new PlaidTransaction(
+        PlaidTransaction plaidTx = new PlaidTransaction(
                 "t-id", "Starbucks", Instant.parse("2026-08-05T10:00:00Z"), "FOOD_AND_DRINK",
                 12.5, false, "USD", null, "account-123", "item-123", "FOOD_AND_DRINK_COFFEE");
         service.upsertTransaction(user(), plaidTx);
@@ -283,7 +284,6 @@ class PlaidTransactionIngestServiceTest {
         List<Object> args = capturedInsertArgs();
         assertEquals(Instant.EPOCH, ((java.sql.Timestamp) args.get(IDX_DATE)).toInstant());
     }
-
 
     // ── Currency resolution ──────────────────────────────────────────────────
 
@@ -353,7 +353,7 @@ class PlaidTransactionIngestServiceTest {
         when(transactionRepository.findByPlaidTransactionIdAndUser_Id("t-mixed", "user-1"))
                 .thenReturn(Optional.of(existing));
         when(budgetRepository.findByUser_IdAndCategoryIgnoreCaseAndDateGreaterThanEqualAndDateLessThan(
-                        eq("user-1"), anyString(), any(Instant.class), any(Instant.class)))
+                eq("user-1"), anyString(), any(Instant.class), any(Instant.class)))
                 .thenReturn(Optional.empty());
         lenient().when(budgetRepository.save(any(Budget.class))).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(budgetRepository.saveAndFlush(any(Budget.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -376,7 +376,7 @@ class PlaidTransactionIngestServiceTest {
     void upsertTransaction_existingBudgetMatch_reusesBudget() {
         Budget existing = budget("b1", 500.0, 100.0);
         when(budgetRepository.findByUser_IdAndCategoryIgnoreCaseAndDateGreaterThanEqualAndDateLessThan(
-                        eq("user-1"), anyString(), any(Instant.class), any(Instant.class)))
+                eq("user-1"), anyString(), any(Instant.class), any(Instant.class)))
                 .thenReturn(Optional.of(existing));
         when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
 
@@ -390,7 +390,7 @@ class PlaidTransactionIngestServiceTest {
     void upsertTransaction_caseInsensitiveBudgetMatch_reusesBudget() {
         Budget existing = budget("b2", 100.0, 10.0);
         when(budgetRepository.findByUser_IdAndCategoryIgnoreCaseAndDateGreaterThanEqualAndDateLessThan(
-                        eq("user-1"), anyString(), any(Instant.class), any(Instant.class)))
+                eq("user-1"), anyString(), any(Instant.class), any(Instant.class)))
                 .thenReturn(Optional.of(existing));
         when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
 
@@ -409,7 +409,7 @@ class PlaidTransactionIngestServiceTest {
         when(transactionRepository.findByPlaidTransactionIdAndUser_Id("dup-1", "user-1"))
                 .thenReturn(Optional.of(existingTx));
         when(budgetRepository.findByUser_IdAndCategoryIgnoreCaseAndDateGreaterThanEqualAndDateLessThan(
-                        eq("user-1"), anyString(), any(Instant.class), any(Instant.class)))
+                eq("user-1"), anyString(), any(Instant.class), any(Instant.class)))
                 .thenReturn(Optional.of(budget));
 
         // Same transaction re-sent with a NEW amount (modified).
@@ -430,7 +430,7 @@ class PlaidTransactionIngestServiceTest {
         when(transactionRepository.findByPlaidTransactionIdAndUser_Id("dup-2", "user-1"))
                 .thenReturn(Optional.of(existingTx));
         when(budgetRepository.findByUser_IdAndCategoryIgnoreCaseAndDateGreaterThanEqualAndDateLessThan(
-                        eq("user-1"), anyString(), any(Instant.class), any(Instant.class)))
+                eq("user-1"), anyString(), any(Instant.class), any(Instant.class)))
                 .thenReturn(Optional.of(budget));
 
         upsert(plaidTx("dup-2", "Lunch", "Food", 25.0, Instant.now(), "USD", null));
@@ -446,7 +446,7 @@ class PlaidTransactionIngestServiceTest {
         when(transactionRepository.findByPlaidTransactionIdAndUser_Id("dup-3", "user-1"))
                 .thenReturn(Optional.of(existingTx));
         when(budgetRepository.findByUser_IdAndCategoryIgnoreCaseAndDateGreaterThanEqualAndDateLessThan(
-                        eq("user-1"), anyString(), any(Instant.class), any(Instant.class)))
+                eq("user-1"), anyString(), any(Instant.class), any(Instant.class)))
                 .thenReturn(Optional.of(budget));
 
         // Now the same transaction is an income (negative) — spent must be restored.
@@ -454,7 +454,6 @@ class PlaidTransactionIngestServiceTest {
 
         verify(budgetRepository).decrementSpentClamped("b5", 80.0);
     }
-
 
     // ── Transfers between the user's own accounts ────────────────────────────
 
@@ -534,7 +533,6 @@ class PlaidTransactionIngestServiceTest {
         verify(budgetRepository).decrementSpentClamped("bt2", 2000.0);
     }
 
-
     // ── Same transaction synced twice ────────────────────────────────────────
 
     @Test
@@ -545,7 +543,7 @@ class PlaidTransactionIngestServiceTest {
         when(transactionRepository.findByPlaidTransactionIdAndUser_Id("id-A", "user-1"))
                 .thenReturn(Optional.of(stored));
         when(budgetRepository.findByUser_IdAndCategoryIgnoreCaseAndDateGreaterThanEqualAndDateLessThan(
-                        eq("user-1"), anyString(), any(Instant.class), any(Instant.class)))
+                eq("user-1"), anyString(), any(Instant.class), any(Instant.class)))
                 .thenReturn(Optional.of(budget));
 
         upsert(plaidTx("id-A", "STARBUCKS", "Food", 5.0, Instant.parse("2026-01-10T00:00:00Z"), "USD", null));
@@ -566,7 +564,7 @@ class PlaidTransactionIngestServiceTest {
         when(transactionRepository.findByPlaidTransactionIdAndUser_Id(anyString(), eq("user-1")))
                 .thenReturn(Optional.of(storedA), Optional.of(storedB), Optional.of(storedC));
         when(budgetRepository.findByUser_IdAndCategoryIgnoreCaseAndDateGreaterThanEqualAndDateLessThan(
-                        eq("user-1"), anyString(), any(Instant.class), any(Instant.class)))
+                eq("user-1"), anyString(), any(Instant.class), any(Instant.class)))
                 .thenReturn(Optional.of(budget));
 
         Instant date = Instant.parse("2026-01-10T00:00:00Z");
@@ -610,7 +608,7 @@ class PlaidTransactionIngestServiceTest {
         when(transactionRepository.findByPlaidTransactionIdAndUser_Id("conf-1", "user-1"))
                 .thenReturn(Optional.of(stored));
         when(budgetRepository.findByUser_IdAndCategoryIgnoreCaseAndDateGreaterThanEqualAndDateLessThan(
-                        eq("user-1"), anyString(), any(Instant.class), any(Instant.class)))
+                eq("user-1"), anyString(), any(Instant.class), any(Instant.class)))
                 .thenReturn(Optional.of(budget));
 
         upsert(plaidTx("conf-1", "STARBUCKS", "Food", 5.0, Instant.parse("2026-01-10T00:00:00Z"), "USD", null));
@@ -620,7 +618,6 @@ class PlaidTransactionIngestServiceTest {
         verify(budgetRepository, never()).incrementSpent(anyString(), anyDouble());
         verify(budgetRepository, never()).decrementSpentClamped(anyString(), anyDouble());
     }
-
 
     // ── Removed transactions ─────────────────────────────────────────────────
 

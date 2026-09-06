@@ -32,21 +32,27 @@ import com.fintechapp.fintech_api.repository.TransactionRepository;
 /**
  * Maps raw Plaid transaction payloads onto the app's transaction/budget model.
  *
- * <p>Each inbound transaction is keyed by {@code transaction_id} and written
+ * <p>
+ * Each inbound transaction is keyed by {@code transaction_id} and written
  * with a single SQL upsert: a new id inserts a row, and an id that already
  * exists locally (e.g. a transaction re-served in Plaid's {@code modified}
  * array) updates the existing row in place. Removed records delete the matching
- * local transaction and restore budget spent aggregates.</p>
+ * local transaction and restore budget spent aggregates.
+ * </p>
  *
- * <p>After a disconnect + reconnect Plaid re-serves the same underlying bank
+ * <p>
+ * After a disconnect + reconnect Plaid re-serves the same underlying bank
  * transactions under <b>new</b> {@code transaction_id}s, so they are inserted
- * as-is — the same purchase may appear once per bank connection.</p>
+ * as-is — the same purchase may appear once per bank connection.
+ * </p>
  *
- * <p>The auto-category rule: a transaction's sanitized personal-finance
+ * <p>
+ * The auto-category rule: a transaction's sanitized personal-finance
  * category is looked up against the user's existing monthly budgets (case
  * insensitive). When no budget matches, a new one is created for that month
  * with a default {@code limit = 0} (a zero-budget category), and the
- * transaction is linked to it.</p>
+ * transaction is linked to it.
+ * </p>
  */
 @Service
 public class PlaidTransactionIngestService {
@@ -94,10 +100,12 @@ public class PlaidTransactionIngestService {
      * auto-creating if necessary) the user's zero-budget category for the
      * transaction's month.
      *
-     * <p>The write is a single SQL upsert keyed on {@code plaid_transaction_id}:
+     * <p>
+     * The write is a single SQL upsert keyed on {@code plaid_transaction_id}:
      * a new id inserts a row; a known id (e.g. Plaid's {@code modified} array)
      * updates the existing row in place and reconciles the budget spent
-     * aggregate by the amount difference.</p>
+     * aggregate by the amount difference.
+     * </p>
      */
     @Transactional
     public void upsertTransaction(User user, PlaidTransaction plaidTx) {
@@ -135,8 +143,8 @@ public class PlaidTransactionIngestService {
         if (plaidTransactionIds == null || plaidTransactionIds.isEmpty()) {
             return;
         }
-        List<Transaction> transactions =
-                transactionRepository.findByPlaidTransactionIdInAndUser_Id(plaidTransactionIds, userId);
+        List<Transaction> transactions = transactionRepository.findByPlaidTransactionIdInAndUser_Id(plaidTransactionIds,
+                userId);
         Set<String> affectedItems = new LinkedHashSet<>();
         for (Transaction tx : transactions) {
             if (StringUtils.hasText(tx.getPlaidItemId())) {
@@ -156,7 +164,8 @@ public class PlaidTransactionIngestService {
     /**
      * Proof-based internal-transfer classification for one user + Plaid item.
      *
-     * <p>A transaction is marked {@code is_transfer = true} only when there is
+     * <p>
+     * A transaction is marked {@code is_transfer = true} only when there is
      * a counterpart that proves the money moved between two of the user's own
      * accounts under the same Plaid item (same institution): for the same UTC
      * calendar day and the identical absolute amount there must be exactly one
@@ -164,30 +173,34 @@ public class PlaidTransactionIngestService {
      * plaid accounts. Any group with more than two rows, same-direction rows,
      * or rows on the same account is ambiguous and is left as income/expense
      * (false-negative-biased — an unproven transfer is never silently removed
-     * from the financial picture).</p>
+     * from the financial picture).
+     * </p>
      *
-     * <p>Both legs must also carry a structured transfer-candidate signal
+     * <p>
+     * Both legs must also carry a structured transfer-candidate signal
      * (Plaid category/descriptor) — this is a <b>required gate, never proof of
      * ownership</b>. A same-day, equal-amount coincidence between two unrelated
      * transactions on different accounts (e.g. a $500 bill from checking and a
      * $500 external deposit into savings) must not silently erase real income
      * or expenses. Ownership is proven only by the pairing conditions above;
-     * the candidate gate simply prevents unrelated transactions from pairing.</p>
+     * the candidate gate simply prevents unrelated transactions from pairing.
+     * </p>
      *
-     * <p>Plaid provides no explicit transfer-pair reference in the
+     * <p>
+     * Plaid provides no explicit transfer-pair reference in the
      * /transactions/sync payload, so the corresponding leg is identified by
      * exact amount + same-day pairing restricted to transactions that carry
      * persisted account ownership data ({@code plaid_account_id} +
      * {@code plaid_item_id}). Transactions without that ownership data are
-     * never re-classified.</p>
+     * never re-classified.
+     * </p>
      */
     @Transactional
     public void reconcileInternalTransfers(String userId, String plaidItemId) {
         if (!StringUtils.hasText(userId) || !StringUtils.hasText(plaidItemId)) {
             return;
         }
-        List<Transaction> candidates =
-                transactionRepository.findTransferCandidates(userId, plaidItemId);
+        List<Transaction> candidates = transactionRepository.findTransferCandidates(userId, plaidItemId);
         if (candidates.size() < 2) {
             return;
         }
@@ -243,11 +256,13 @@ public class PlaidTransactionIngestService {
      * generic card-payment descriptors). Used only as a required gate alongside
      * the ownership pairing — it is never proof of ownership on its own.
      *
-     * <p>Payroll and refunds are hard exclusions: a deposit categorized as
+     * <p>
+     * Payroll and refunds are hard exclusions: a deposit categorized as
      * {@code TRANSFER_PAYROLL} (or a refund under a transfer umbrella) must
      * never become the income leg of an internal-transfer pair, and an
      * opposite-legged same-day equal-amount coincidence must not hide real
-     * payroll or refund activity.</p>
+     * payroll or refund activity.
+     * </p>
      */
     private static boolean isTransferCandidate(Transaction t) {
         // Plaid's coarse primary/detailed category (e.g. "TRANSFER_IN",
@@ -286,7 +301,9 @@ public class PlaidTransactionIngestService {
         return false;
     }
 
-    /** Flips an expense/income into a transfer and reverses any budget contribution. */
+    /**
+     * Flips an expense/income into a transfer and reverses any budget contribution.
+     */
     private void markAsTransfer(Transaction tx) {
         if (tx.getType() == TransactionType.EXPENSE && tx.getBudget() != null) {
             // Atomic, zero-floored decrement — safe against concurrent writers.
@@ -297,7 +314,10 @@ public class PlaidTransactionIngestService {
         transactionRepository.save(tx);
     }
 
-    /** Flips a transfer back into normal activity, applying the existing budget rules. */
+    /**
+     * Flips a transfer back into normal activity, applying the existing budget
+     * rules.
+     */
     private void unmarkTransfer(Transaction tx) {
         if (tx.getType() == TransactionType.EXPENSE) {
             Budget budget = resolveOrCreateBudget(tx.getUser(), tx.getCategory(), tx.getDate());
@@ -325,10 +345,12 @@ public class PlaidTransactionIngestService {
     /**
      * Updates an existing local transaction with the incoming Plaid payload.
      *
-     * <p>Transfers never contribute to budget spent aggregates: when a row
+     * <p>
+     * Transfers never contribute to budget spent aggregates: when a row
      * becomes a transfer its previous budget contribution is restored, and when
      * a row stops being a transfer the full amount is added to the resolved
-     * budget (the old transfer row had no contribution).</p>
+     * budget (the old transfer row had no contribution).
+     * </p>
      */
     private void applyUpdate(Transaction tx, User user, PlaidTransaction plaidTx) {
         String category = categoryFormatter.toReadableCategory(plaidTx.category());
@@ -353,7 +375,7 @@ public class PlaidTransactionIngestService {
         tx.setBaseCurrency(baseCurrency);
         tx.setOriginalCurrency(originalCurrency);
         tx.setOriginalAmount(originalAmount);
-                tx.setPlaidTransactionId(plaidTx.transactionId());
+        tx.setPlaidTransactionId(plaidTx.transactionId());
         tx.setPlaidAccountId(plaidTx.plaidAccountId());
         tx.setPlaidItemId(plaidTx.plaidItemId());
         tx.setPlaidPfcDetailed(plaidTx.plaidPfcDetailed());
@@ -393,8 +415,10 @@ public class PlaidTransactionIngestService {
      * exists (e.g. a transaction re-served in Plaid's {@code modified} array or
      * a concurrent sync) — it is loaded and reconciled as an update instead.
      *
-     * <p>Transfer transactions are stored without a budget link and never
-     * increment budget spent.</p>
+     * <p>
+     * Transfer transactions are stored without a budget link and never
+     * increment budget spent.
+     * </p>
      */
     private void insert(User user, PlaidTransaction plaidTx) {
         String category = categoryFormatter.toReadableCategory(plaidTx.category());
@@ -425,7 +449,7 @@ public class PlaidTransactionIngestService {
                 baseCurrency,
                 originalAmount,
                 originalCurrency,
-                                plaidTx.transactionId(),
+                plaidTx.transactionId(),
                 plaidTx.plaidAccountId(),
                 plaidTx.plaidItemId(),
                 transfer,
@@ -465,8 +489,10 @@ public class PlaidTransactionIngestService {
     /**
      * Resolves the month-scoped budget for a transaction's category.
      *
-     * <p>Package-private so concurrency regression tests in this package can
-     * drive the race entry point directly.</p>
+     * <p>
+     * Package-private so concurrency regression tests in this package can
+     * drive the race entry point directly.
+     * </p>
      */
     Budget resolveOrCreateBudget(User user, String category, Instant txDate) {
         LocalDate localDate = LocalDate.ofInstant(txDate, ZoneOffset.UTC);
@@ -495,12 +521,12 @@ public class PlaidTransactionIngestService {
         // retrieves the budget the winning writer created and both callers
         // converge on the single persisted row.
         jdbcTemplate.update("""
-                        INSERT INTO budgets (
-                            id, date, category, budget_limit, spent,
-                            is_auto_created, user_id, created_at, updated_at
-                        ) VALUES (?, ?, ?, 0, 0, TRUE, ?, NOW(), NOW())
-                        ON CONFLICT (user_id, category, date) DO NOTHING
-                        """,
+                INSERT INTO budgets (
+                    id, date, category, budget_limit, spent,
+                    is_auto_created, user_id, created_at, updated_at
+                ) VALUES (?, ?, ?, 0, 0, TRUE, ?, NOW(), NOW())
+                ON CONFLICT (user_id, LOWER(TRIM(category)), date) DO NOTHING
+                """,
                 UUID.randomUUID().toString(),
                 Timestamp.from(monthStart),
                 category,
@@ -526,7 +552,10 @@ public class PlaidTransactionIngestService {
         return budgetRepository.saveAndFlush(created);
     }
 
-    /** Mirrors the spending reconciliation in {@code TransactionService.updateTransaction}. */
+    /**
+     * Mirrors the spending reconciliation in
+     * {@code TransactionService.updateTransaction}.
+     */
     private void reconcileBudgetOnUpdate(
             Budget oldBudget,
             double oldAmount,

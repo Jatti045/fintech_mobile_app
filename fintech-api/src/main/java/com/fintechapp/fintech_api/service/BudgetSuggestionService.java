@@ -30,22 +30,26 @@ import com.fintechapp.fintech_api.repository.TransactionRepository;
 /**
  * Deterministic, explainable suggested limits for setting up a month.
  *
- * <p>Signal priority (strongest first):</p>
+ * <p>
+ * Signal priority (strongest first):
+ * </p>
  *
  * <ol>
- *   <li><b>Previous month's manually configured budget</b> — inherited
- *   verbatim. Auto-created $0 rows from Plaid carry no intent and are never a
- *   source.</li>
- *   <li><b>Recent completed-month spending</b> — median of up to
- *   {@value #HISTORY_MONTHS} completed months' expense totals (transfers
- *   excluded, consistent with every other aggregate), rounded up
- *   conservatively. Requires {@value #MIN_EVIDENCE_MONTHS}+ distinct months of
- *   evidence; one month is not enough to invent a confident number.</li>
+ * <li><b>Previous month's manually configured budget</b> — inherited
+ * verbatim. Auto-created $0 rows from Plaid carry no intent and are never a
+ * source.</li>
+ * <li><b>Recent completed-month spending</b> — median of up to
+ * {@value #HISTORY_MONTHS} completed months' expense totals (transfers
+ * excluded, consistent with every other aggregate), rounded up
+ * conservatively. Requires {@value #MIN_EVIDENCE_MONTHS}+ distinct months of
+ * evidence; one month is not enough to invent a confident number.</li>
  * </ol>
  *
- * <p>Categories already manually budgeted in the target month are never
+ * <p>
+ * Categories already manually budgeted in the target month are never
  * suggested, and incomplete/current sample months are excluded so estimates
- * never come from a month still in progress. Read-only service.</p>
+ * never come from a month still in progress. Read-only service.
+ * </p>
  */
 @Service
 public class BudgetSuggestionService {
@@ -125,6 +129,7 @@ public class BudgetSuggestionService {
 
         // ── Signal 2: recent completed-month spending ────────────────────────
         Map<String, List<Double>> evidence = new LinkedHashMap<>();
+        Map<String, String> displayNames = new LinkedHashMap<>();
         for (int k = 1; k <= HISTORY_MONTHS; k++) {
             YearMonth sample = target.minusMonths(k);
             Instant windowStart = sample.atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC);
@@ -137,7 +142,11 @@ public class BudgetSuggestionService {
                 if (ct.getCategory() == null || ct.getTotal() == null || ct.getTotal() <= 0) {
                     continue;
                 }
-                evidence.computeIfAbsent(ct.getCategory().toLowerCase(Locale.ROOT), x -> new ArrayList<>())
+                String canonical = CategoryNormalizer.normalize(ct.getCategory());
+                String key = canonical != null ? canonical.toLowerCase(Locale.ROOT)
+                        : ct.getCategory().toLowerCase(Locale.ROOT);
+                displayNames.putIfAbsent(key, canonical != null ? canonical : ct.getCategory());
+                evidence.computeIfAbsent(key, x -> new ArrayList<>())
                         .add(ct.getTotal());
             }
         }
@@ -152,7 +161,8 @@ public class BudgetSuggestionService {
                 continue;
             }
             Budget inTarget = currentByCategory.get(key);
-            String name = inTarget != null ? inTarget.getCategory() : key;
+            String name = inTarget != null ? inTarget.getCategory()
+                    : displayNames.getOrDefault(key, CategoryNormalizer.normalize(key));
             suggestions.add(buildItem(name, roundSuggestion(median(totals)),
                     SOURCE_HISTORICAL_SPENDING, false, totals.size(), inTarget));
         }
