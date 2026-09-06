@@ -192,6 +192,100 @@ public class DatabaseSchemaAutoPatch implements ApplicationRunner {
                                 DROP TABLE IF EXISTS goals
                                 """);
 
+                // Budget uniqueness invariant: at most one budget per
+                // (user_id, category, date) — `date` holds the first day of
+                // the month at 00:00 UTC. V18 migration mirrors this patch.
+                // Idempotent duplicate reconciliation FIRST (re-point
+                // transactions to the deterministic keeper, merge spent,
+                // delete the duplicate rows), then the constraint itself.
+                jdbcTemplate.execute("""
+                                WITH ranked AS (
+                                    SELECT id, user_id, category, date, is_auto_created, created_at,
+                                           ROW_NUMBER() OVER (
+                                               PARTITION BY user_id, category, date
+                                               ORDER BY is_auto_created ASC, created_at ASC, id ASC
+                                           ) AS rn
+                                    FROM budgets
+                                ),
+                                keeper AS (
+                                    SELECT id AS keeper_id, user_id, category, date
+                                    FROM ranked WHERE rn = 1
+                                ),
+                                dupe AS (
+                                    SELECT id AS dupe_id, user_id, category, date
+                                    FROM ranked WHERE rn > 1
+                                )
+                                UPDATE transactions t
+                                SET budget_id = k.keeper_id, updated_at = NOW()
+                                FROM dupe d
+                                JOIN keeper k
+                                  ON k.user_id = d.user_id AND k.category = d.category AND k.date = d.date
+                                WHERE t.budget_id = d.dupe_id
+                                """);
+                jdbcTemplate.execute("""
+                                WITH ranked AS (
+                                    SELECT id, user_id, category, date, is_auto_created, created_at,
+                                           ROW_NUMBER() OVER (
+                                               PARTITION BY user_id, category, date
+                                               ORDER BY is_auto_created ASC, created_at ASC, id ASC
+                                           ) AS rn
+                                    FROM budgets
+                                ),
+                                keeper AS (
+                                    SELECT id AS keeper_id, user_id, category, date
+                                    FROM ranked WHERE rn = 1
+                                ),
+                                dupe AS (
+                                    SELECT id AS dupe_id, user_id, category, date
+                                    FROM ranked WHERE rn > 1
+                                ),
+                                dupe_totals AS (
+                                    SELECT k.keeper_id, COALESCE(SUM(b.spent), 0) AS dupe_spent
+                                    FROM dupe d
+                                    JOIN keeper k
+                                      ON k.user_id = d.user_id AND k.category = d.category AND k.date = d.date
+                                    JOIN budgets b ON b.id = d.dupe_id
+                                    GROUP BY k.keeper_id
+                                )
+                                UPDATE budgets kb
+                                SET spent = kb.spent + dt.dupe_spent, updated_at = NOW()
+                                FROM dupe_totals dt
+                                WHERE kb.id = dt.keeper_id
+                                """);
+                jdbcTemplate.execute("""
+                                WITH ranked AS (
+                                    SELECT id, user_id, category, date, is_auto_created, created_at,
+                                           ROW_NUMBER() OVER (
+                                               PARTITION BY user_id, category, date
+                                               ORDER BY is_auto_created ASC, created_at ASC, id ASC
+                                           ) AS rn
+                                    FROM budgets
+                                ),
+                                dupe AS (
+                                    SELECT id AS dupe_id
+                                    FROM ranked WHERE rn > 1
+                                )
+                                DELETE FROM budgets b
+                                USING dupe d
+                                WHERE b.id = d.dupe_id
+                                """);
+                jdbcTemplate.execute("""
+                                DO $$
+                                BEGIN
+                                    IF NOT EXISTS (
+                                        SELECT 1
+                                        FROM pg_constraint
+                                        WHERE conname = 'uq_budgets_user_category_month'
+                                          AND conrelid = 'budgets'::regclass
+                                    ) THEN
+                                        ALTER TABLE budgets
+                                            ADD CONSTRAINT uq_budgets_user_category_month
+                                            UNIQUE (user_id, category, date);
+                                    END IF;
+                                END
+                                $$
+                                """);
+
                 logger.info("Database schema patch check completed for user_monthly_incomes, plaid_items, transactions");
         }
 }

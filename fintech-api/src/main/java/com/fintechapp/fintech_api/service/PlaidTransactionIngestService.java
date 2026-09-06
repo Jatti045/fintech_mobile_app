@@ -462,8 +462,13 @@ public class PlaidTransactionIngestService {
         transactionRepository.delete(tx);
     }
 
-    /** Resolves the month-scoped budget for a transaction's category. */
-    private Budget resolveOrCreateBudget(User user, String category, Instant txDate) {
+    /**
+     * Resolves the month-scoped budget for a transaction's category.
+     *
+     * <p>Package-private so concurrency regression tests in this package can
+     * drive the race entry point directly.</p>
+     */
+    Budget resolveOrCreateBudget(User user, String category, Instant txDate) {
         LocalDate localDate = LocalDate.ofInstant(txDate, ZoneOffset.UTC);
         int year = localDate.getYear();
         int monthIndex = localDate.getMonthValue() - 1;
@@ -478,6 +483,38 @@ public class PlaidTransactionIngestService {
             return existing.get();
         }
 
+        // Race-safe creation. Two syncs for DIFFERENT Plaid items of the same
+        // user can both pass the check-then-insert lookup above concurrently
+        // (the per-item sync lock does not serialize different items). Instead
+        // of saveAndFlush — whose unique-constraint failure would abort the
+        // surrounding @Transactional unit and surface as a 500 — the insert is
+        // a native INSERT ... ON CONFLICT (user_id, category, date) DO NOTHING
+        // against the uq_budgets_user_category_month constraint. The losing
+        // writer's statement is a silent no-op (NOT an exception), so the
+        // enclosing transaction is never invalidated; the re-query below then
+        // retrieves the budget the winning writer created and both callers
+        // converge on the single persisted row.
+        jdbcTemplate.update("""
+                        INSERT INTO budgets (
+                            id, date, category, budget_limit, spent,
+                            is_auto_created, user_id, created_at, updated_at
+                        ) VALUES (?, ?, ?, 0, 0, TRUE, ?, NOW(), NOW())
+                        ON CONFLICT (user_id, category, date) DO NOTHING
+                        """,
+                UUID.randomUUID().toString(),
+                Timestamp.from(monthStart),
+                category,
+                user.getId());
+
+        Optional<Budget> resolved = budgetRepository
+                .findByUser_IdAndCategoryIgnoreCaseAndDateGreaterThanEqualAndDateLessThan(
+                        user.getId(), category, monthStart, nextMonthStart);
+        if (resolved.isPresent()) {
+            return resolved.get();
+        }
+
+        // Defensive fallback for a database that predates the unique-constraint
+        // migration and had no row to re-query. Same behavior as before.
         Budget created = new Budget();
         created.setUser(user);
         created.setCategory(category);

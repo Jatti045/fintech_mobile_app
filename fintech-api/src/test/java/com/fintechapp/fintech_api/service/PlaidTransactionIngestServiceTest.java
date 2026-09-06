@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -116,8 +117,13 @@ class PlaidTransactionIngestServiceTest {
 
     private List<Object> capturedInsertArgs() {
         ArgumentCaptor<Object[]> captor = ArgumentCaptor.forClass(Object[].class);
-        verify(jdbcTemplate).update(anyString(), captor.capture());
-        Object[] args = captor.getValue();
+        // The race-safe auto-create path issues a native budget upsert
+        // (INSERT ... ON CONFLICT DO NOTHING) before the native transaction
+        // insert, so there can be more than one update call. The transaction
+        // INSERT is always the last one.
+        verify(jdbcTemplate, atLeastOnce()).update(anyString(), captor.capture());
+        List<Object[]> allInvocations = captor.getAllValues();
+        Object[] args = allInvocations.get(allInvocations.size() - 1);
         return args == null ? List.of() : Arrays.asList(args);
     }
 
@@ -188,6 +194,32 @@ class PlaidTransactionIngestServiceTest {
         assertEquals(12.5, (Double) args.get(IDX_AMOUNT));
         assertEquals("t1", args.get(IDX_PLAID_TX_ID));
         assertEquals("user-1", args.get(IDX_USER_ID));
+    }
+
+    @Test
+    void upsertTransaction_newExpense_autoCreateUsesNativeConflictSafeUpsert() {
+        // The auto-create path must rely on the database-level unique
+        // constraint with ON CONFLICT DO NOTHING so a concurrent sync that
+        // wins the race never invalidates this transaction with a unique
+        // violation — it just makes this writer's INSERT a silent no-op.
+        stubNewTransactionInsert();
+
+        Instant date = Instant.parse("2026-08-05T10:00:00Z");
+        upsert(plaidTx("t1", "Starbucks", "FOOD_AND_DRINK", 12.5, date, "USD", null));
+
+        ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<Object[]> argsCaptor = ArgumentCaptor.forClass(Object[].class);
+        verify(jdbcTemplate, atLeastOnce()).update(sqlCaptor.capture(), argsCaptor.capture());
+
+        String budgetUpsertSql = sqlCaptor.getAllValues().get(0);
+        assertTrue(budgetUpsertSql.contains("INSERT INTO budgets"));
+        assertTrue(budgetUpsertSql.contains("ON CONFLICT (user_id, category, date) DO NOTHING"));
+
+        Object[] budgetArgs = argsCaptor.getAllValues().get(0);
+        assertEquals(4, budgetArgs.length);
+        assertEquals(java.sql.Timestamp.from(Instant.parse("2026-08-01T00:00:00Z")), budgetArgs[1]); // month start
+        assertEquals("Food & Drink", budgetArgs[2]);                                        // category
+        assertEquals("user-1", budgetArgs[3]);                                              // user id
     }
 
     @Test
@@ -562,7 +594,9 @@ class PlaidTransactionIngestServiceTest {
         upsert(plaidTx("id-2", "STARBUCKS", "Food", 5.0, date, "USD", null));
 
         // Both are inserted: two legitimate transactions with identical values.
-        verify(jdbcTemplate, times(2)).update(anyString(), any(Object[].class));
+        // Each upsert also issues the race-safe native budget upsert (no-op
+        // against the mock), so 4 update statements in total.
+        verify(jdbcTemplate, times(4)).update(anyString(), any(Object[].class));
         verify(transactionRepository, never()).save(any(Transaction.class));
     }
 
