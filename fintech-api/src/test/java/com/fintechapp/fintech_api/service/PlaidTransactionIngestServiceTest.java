@@ -240,18 +240,22 @@ class PlaidTransactionIngestServiceTest {
     }
 
     @Test
-    void upsertTransaction_newIncome_doesNotIncrementBudgetSpent() {
-        stubNewTransactionInsert();
+    void upsertTransaction_newIncome_doesNotCreateOrAttachToBudget() {
+        // Stub only the transaction insert — no budget lookups/creations may
+        // happen for income.
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
 
-        // Negative amount => INCOME (money in).
+        // Negative amount => INCOME (money in). Income is not a budgeted
+        // activity: no budget may be created and no budget link assigned.
         upsert(plaidTx("t2", "Paycheck", "Income", -3000.0, Instant.parse("2026-08-01T08:00:00Z"), "USD", null));
 
-        ArgumentCaptor<Budget> budgetCaptor = ArgumentCaptor.forClass(Budget.class);
-        verify(budgetRepository).saveAndFlush(budgetCaptor.capture());
-        assertEquals(0.0, budgetCaptor.getValue().getSpent());
+        verify(budgetRepository, never()).saveAndFlush(any(Budget.class));
+        verify(budgetRepository, never()).save(any(Budget.class));
+        verify(budgetRepository, never()).incrementSpent(anyString(), anyDouble());
 
         List<Object> args = capturedInsertArgs();
         assertEquals(TransactionType.INCOME.name(), args.get(IDX_TYPE));
+        assertNull(args.get(IDX_BUDGET_ID)); // income is never assigned a budget
         assertEquals(3000.0, (Double) args.get(IDX_AMOUNT)); // absolute amount stored
     }
 
@@ -445,14 +449,14 @@ class PlaidTransactionIngestServiceTest {
         when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(0);
         when(transactionRepository.findByPlaidTransactionIdAndUser_Id("dup-3", "user-1"))
                 .thenReturn(Optional.of(existingTx));
-        when(budgetRepository.findByUser_IdAndCategoryIgnoreCaseAndDateGreaterThanEqualAndDateLessThan(
-                eq("user-1"), anyString(), any(Instant.class), any(Instant.class)))
-                .thenReturn(Optional.of(budget));
+        // NOTE: no budget lookup stub — the income update path must not resolve
+        // or create a budget; it only detaches and restores spent.
 
         // Now the same transaction is an income (negative) — spent must be restored.
         upsert(plaidTx("dup-3", "Refund", "Food", -80.0, Instant.now(), "USD", null));
 
         verify(budgetRepository).decrementSpentClamped("b5", 80.0);
+        verify(budgetRepository, never()).saveAndFlush(any(Budget.class));
     }
 
     // ── Transfers between the user's own accounts ────────────────────────────

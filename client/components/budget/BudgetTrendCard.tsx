@@ -17,6 +17,7 @@ import { useTheme } from "@/hooks/useRedux";
 import { formatCurrency, hexToRgba } from "@/utils/helper";
 import { safeAmount } from "@/utils/transaction/helpers";
 import {
+  budgetPace,
   buildMonthSpendSeries,
   daysInMonth,
   todayDayOfMonth,
@@ -113,14 +114,30 @@ const BudgetTrendCard = React.memo(function BudgetTrendCard({
     spent, limit, totalDays, isCurrentMonth, todayDay, width,
   ]);
 
-  const elapsedDays = Math.max(1, isCurrentMonth ? todayDay : totalDays);
-  const avgPerDay = spent / elapsedDays;
-  const remaining = Math.max(0, limit - spent);
-  const daysLeft = isCurrentMonth ? Math.max(1, totalDays - todayDay + 1) : 0;
-  const dailyLeft = isCurrentMonth ? remaining / daysLeft : null;
+  const pace = budgetPace({
+    limit,
+    spent,
+    isCurrentMonth,
+    todayDay: todayDay,
+    totalDays,
+  });
+  const pctUsedLabel = limit > 0 ? `${Math.round(pace.pctUsed * 100)}%` : null;
+  const statusLabel: Record<string, string> = {
+    idle: "No limit set",
+    on_track: "On track",
+    at_risk: "At risk",
+    over: "Over budget",
+  };
+  const statusColor: Record<string, string> = {
+    idle: THEME.textSecondary,
+    on_track: THEME.success,
+    at_risk: THEME.warning,
+    over: THEME.danger,
+  };
 
-  const overspent = limit > 0 && spent > limit;
+  const overspent = pace.overspent;
   const hasActivity = series.some((p) => p.cumulative > 0);
+  const progressRatio = limit > 0 ? Math.min(1, spent / limit) : 0;
 
   const activeColor = overspent ? THEME.danger : THEME.primary;
   const activeGradient: [string, string] = overspent
@@ -163,13 +180,80 @@ const BudgetTrendCard = React.memo(function BudgetTrendCard({
         </View>
         <Text
           style={{
-            color: overspent ? THEME.danger : THEME.success,
+            color: statusColor[pace.status],
             fontSize: 12,
             fontWeight: "700",
           }}
         >
-          {overspent ? "Past the rail" : hasActivity ? "Flowing" : "Idle"}
+          {statusLabel[pace.status]}
         </Text>
+      </View>
+
+      {/* Spent vs limit + progress bar */}
+      <View style={{ marginBottom: 10 }}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "baseline",
+            justifyContent: "space-between",
+            marginBottom: 6,
+          }}
+        >
+          <Text
+            style={{
+              color: THEME.textPrimary,
+              fontSize: 15,
+              fontWeight: "800",
+            }}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+          >
+            {formatCurrency(spent, currencyCode)}
+            {limit > 0 ? (
+              <Text
+                style={{ color: THEME.textSecondary, fontWeight: "600" }}
+              >
+                {" "}
+                of {formatCurrency(limit, currencyCode)}
+              </Text>
+            ) : null}
+          </Text>
+          {pctUsedLabel ? (
+            <Text
+              style={{
+                color: statusColor[pace.status],
+                fontSize: 12,
+                fontWeight: "800",
+              }}
+            >
+              {pctUsedLabel} used
+            </Text>
+          ) : null}
+        </View>
+        {limit > 0 ? (
+          <View
+            style={{
+              height: 6,
+              borderRadius: 3,
+              backgroundColor: hexToRgba(THEME.border, 0.6),
+              overflow: "hidden",
+            }}
+          >
+            <View
+              style={{
+                height: 6,
+                borderRadius: 3,
+                width: `${Math.round(progressRatio * 100)}%` as any,
+                backgroundColor:
+                  pace.status === "over"
+                    ? THEME.danger
+                    : pace.status === "at_risk"
+                      ? THEME.warning
+                      : THEME.primary,
+              }}
+            />
+          </View>
+        ) : null}
       </View>
 
 {/* Chart */}
@@ -264,23 +348,27 @@ const BudgetTrendCard = React.memo(function BudgetTrendCard({
           value={
             overspent
               ? `Over ${formatCurrency(Math.abs(spent - limit), currencyCode)}`
-              : formatCurrency(remaining, currencyCode)
+              : formatCurrency(pace.remaining, currencyCode)
           }
           accent={overspent ? THEME.danger : THEME.success}
         />
         <TrendTile
-          label="Daily left"
-          value={
-            dailyLeft == null
-              ? "—"
-              : formatCurrency(dailyLeft, currencyCode)
+          label="Projected"
+          value={formatCurrency(pace.projectedSpend, currencyCode)}
+          accent={
+            limit > 0 && pace.projectedSpend > limit
+              ? THEME.danger
+              : THEME.textPrimary
           }
-          accent={dailyLeft != null && dailyLeft <= 0 ? THEME.danger : THEME.textPrimary}
         />
         <TrendTile
-          label="Avg / day"
-          value={formatCurrency(avgPerDay, currencyCode)}
-          accent={THEME.textPrimary}
+          label="Daily left"
+          value={
+            pace.dailyLeft == null
+              ? "—"
+              : formatCurrency(pace.dailyLeft, currencyCode)
+          }
+          accent={pace.dailyLeft != null && pace.dailyLeft <= 0 ? THEME.danger : THEME.textPrimary}
         />
       </View>
     </GlassPanel>

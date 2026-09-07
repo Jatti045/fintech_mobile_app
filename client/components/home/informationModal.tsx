@@ -216,8 +216,8 @@ function InformationModal({
                 Themes & Currency
               </Text>
               <Text style={{ color: THEME.textSecondary, marginBottom: 12 }}>
-                Head to the Profile tab to switch between Light, Dark, Ocean,
-                and Rose colour themes. You can also change your default display
+                Head to the Profile tab to switch between Light, Dark, Ember,
+                and Aurora colour themes. You can also change your default display
                 currency from the same screen — all monetary values will be
                 shown in the selected currency.
               </Text>

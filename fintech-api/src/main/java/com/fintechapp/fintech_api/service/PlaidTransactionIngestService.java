@@ -393,19 +393,30 @@ public class PlaidTransactionIngestService {
             return;
         }
 
-        Budget budget = resolveOrCreateBudget(user, category, txDate);
-        tx.setBudget(budget);
-        transactionRepository.save(tx);
+        // Income is not a budgeted activity: it must never create or attach
+        // to a budget. Only expenses participate in budget tracking.
+        // (Transfers were already handled above.)
+        if (type == TransactionType.EXPENSE) {
+            Budget budget = resolveOrCreateBudget(user, category, txDate);
+            tx.setBudget(budget);
+            transactionRepository.save(tx);
 
-        if (wasTransfer) {
-            // Previously a transfer with no budget contribution; the full
-            // amount is now real activity. Atomic database-side increment.
-            if (type == TransactionType.EXPENSE) {
+            if (wasTransfer) {
+                // Previously a transfer with no budget contribution; the full
+                // amount is now real activity. Atomic database-side increment.
                 budgetRepository.incrementSpent(budget.getId(), absoluteAmount);
+                return;
             }
-            return;
+            reconcileBudgetOnUpdate(oldBudget, oldAmount, oldType, budget, absoluteAmount, type);
+        } else {
+            // Income: detach from any budget it may previously have been
+            // assigned to (e.g. rows written by the old behaviour).
+            tx.setBudget(null);
+            transactionRepository.save(tx);
+            // If this row was previously a budgeted expense, its contribution
+            // must be removed from the old budget's spent aggregate.
+            reconcileBudgetOnUpdate(oldBudget, oldAmount, oldType, null, absoluteAmount, type);
         }
-        reconcileBudgetOnUpdate(oldBudget, oldAmount, oldType, budget, absoluteAmount, type);
     }
 
     /**
@@ -429,7 +440,12 @@ public class PlaidTransactionIngestService {
         String baseCurrency = aggregationCurrency(user);
         double absoluteAmount = currencyConversionService.convert(originalAmount, originalCurrency, baseCurrency);
         boolean transfer = plaidTx.transfer();
-        Budget budget = transfer ? null : resolveOrCreateBudget(user, category, txDate);
+        // Income is not a budgeted activity: it must never create or attach
+        // to a budget. Only expenses participate in budget tracking.
+        Budget budget =
+            transfer || type == TransactionType.INCOME
+                ? null
+                : resolveOrCreateBudget(user, category, txDate);
 
         int inserted = jdbcTemplate.update("""
                 INSERT INTO transactions (

@@ -54,6 +54,6 @@ import type { ThemeOption } from "@/types/profile/types";
 export const THEME_OPTIONS: ThemeOption[] = [
   { name: "Light", color: "#B8942F", icon: "sunny-outline" },
   { name: "Dark", color: "#D4AF6A", icon: "moon-outline" },
-  { name: "Ocean", color: "#0EA5E9", icon: "water-outline" },
-  { name: "Rose", color: "#EB6F92", icon: "rose-outline" },
+  { name: "Ember", color: "#E8865A", icon: "flame-outline" },
+  { name: "Aurora", color: "#7C6CF6", icon: "sparkles-outline" },
 ];

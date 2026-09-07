@@ -664,13 +664,21 @@ function TransactionModal({
                 <View className="mb-12">
                   <TouchableOpacity
                     onPress={async () => {
-                      // Basic front-end validation
+                      // Basic front-end validation. Income requires only
+                      // name + amount (currency and date always have
+                      // defaults); expenses additionally require a
+                      // category/budget selection.
+                      if (!txName || txAmount === "") {
+                        showAlert({ title: "Please fill all fields" });
+                        return;
+                      }
                       if (
-                        !txName ||
-                        txAmount === "" ||
+                        type === TransactionType.EXPENSE &&
                         !txSelectedCategoryAndId?.name
                       ) {
-                        showAlert({ title: "Please fill all fields" });
+                        showAlert({
+                          title: "Please select a category",
+                        });
                         return;
                       }
 

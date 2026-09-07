@@ -101,6 +101,93 @@ export function buildMonthSpendSeries(
 export function todayDayOfMonth(): number {
   return new Date().getDate();
 }
+
+// ── Budget pace / status ────────────────────────────────────────────────────
+
+export type BudgetPaceStatus = "idle" | "on_track" | "at_risk" | "over";
+
+export interface BudgetPace {
+  /** Concise status derived from utilization AND spending pace. */
+  status: BudgetPaceStatus;
+  /** Fraction of the limit consumed, 0..∞ (1 == exactly at budget). */
+  pctUsed: number;
+  /** Straight-line projection of month-end spend (equals spent for past months). */
+  projectedSpend: number;
+  /** Per-day allowance for the rest of the month (null for past months). */
+  dailyLeft: number | null;
+  /** Remaining allowance, floored at 0. */
+  remaining: number;
+  /** True when spent exceeds the limit. */
+  overspent: boolean;
+}
+
+export interface BudgetPaceInput {
+  limit: number;
+  spent: number;
+  /** Is the budget's month the month we are currently in? */
+  isCurrentMonth: boolean;
+  /** Day of month "today" is (1-based). Ignored for non-current months. */
+  todayDay?: number;
+  /** Total days in the budget's month. */
+  totalDays: number;
+}
+
+/**
+ * Derives actionable budget-status information from a budget's limit, its
+ * month-scoped spend, and the month's progress. Pure so it is unit-testable.
+ *
+ * Status rules:
+ * - `idle`     — no limit configured (empty/recently created budget) and no spend.
+ * - `over`     — spent exceeds the limit.
+ * - `at_risk`  — projected month-end spend exceeds the limit (or spent is
+ *                already ≥ 80% of the limit while more than a fifth of the
+ *                month remains).
+ * - `on_track` — everything else.
+ */
+export function budgetPace({
+  limit,
+  spent,
+  isCurrentMonth,
+  todayDay,
+  totalDays,
+}: BudgetPaceInput): BudgetPace {
+  const day = isCurrentMonth
+    ? Math.min(Math.max(1, todayDay ?? 1), totalDays)
+    : totalDays;
+  const daysLeft = isCurrentMonth ? Math.max(1, totalDays - day + 1) : 0;
+
+  const remaining = Math.max(0, limit - spent);
+  const overspent = limit > 0 && spent > limit;
+  const pctUsed = limit > 0 ? spent / limit : 0;
+
+  // Straight-line projection from actual burn so far. Past months are
+  // complete, so the projection is simply what was spent.
+  const elapsedDays = Math.max(1, day);
+  const projectedSpend = isCurrentMonth
+    ? (spent / elapsedDays) * totalDays
+    : spent;
+
+  const dailyLeft = isCurrentMonth ? remaining / daysLeft : null;
+
+  let status: BudgetPaceStatus;
+  if (limit <= 0 && spent <= 0) {
+    status = "idle";
+  } else if (overspent) {
+    status = "over";
+  } else if (
+    limit > 0 &&
+    isCurrentMonth &&
+    // Tiny epsilon guards against floating-point drift like 500/30*30 > 500.
+    (projectedSpend > limit + 1e-6 ||
+      (pctUsed >= 0.8 && daysLeft > totalDays / 5))
+  ) {
+    status = "at_risk";
+  } else {
+    status = "on_track";
+  }
+
+  return { status, pctUsed, projectedSpend, dailyLeft, remaining, overspent };
+}
 export function overspendDeltaCents(
   limitRaw: number | string,
   spentRaw: number | string,
